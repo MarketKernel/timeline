@@ -1,0 +1,37 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # ubuntu-latest ships Chrome at /usr/bin/google-chrome, where tools/chrome.mjs looks.
+      # The page and the PWA (build/pages/: the worker, the manifest, offline, updates).
+      - run: npm run test:browser
+
+      # The single HTML file must not pull anything off the network.
+      - name: No external references in the build
+        run: |
+          if grep -oE '(src|href)="(https?:)?//[^"]*"' build/timeline.html; then
+            echo "::error::external resources are left in build/timeline.html"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: timeline
+          path: build/timeline.html

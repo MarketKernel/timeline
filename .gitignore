@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output — everything in it is made by `npm run build`
+build/
+
+# Local notes, the old LifeMap kept for reference
+private/
+_OLD/
+
+# Working notes for the author and the agent: the specification, Claude Code's instructions and settings
+CLAUDE.md
+Task.md
+.claude/
+
+# Screenshots from `npm run shots -- <dir>`
+shots/
+
+# Logs and caches
+*.log
+npm-debug.log*
+*.tsbuildinfo
+
+# Editors and OS
+.vscode/*
+!.vscode/settings.json
+.idea/
+.DS_Store
+._*
+Thumbs.db

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover hands the notch and the home indicator to env(safe-area-inset-*);
+     resizes-content makes Chrome on Android shrink the page, not cover it, with the keyboard. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<!-- Nothing leaves the page: no fetch, no images or fonts from elsewhere, no forms posting out.
+     Images and the background music come out of the open .timeline as blob: URLs; the icon is a data: URI.
+     build.mjs swaps script-src 'unsafe-inline' for the hash of the one inline script. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Timeline</title>
+<link rel="icon" href="__ICON__">
+<style>/*__STYLES__*/</style>
+</head>
+<body>
+
+<!-- ============================== Start ============================== -->
+<main id="start" class="start">
+  <div class="start-inner">
+    <header class="start-head">
+      <img class="start-logo" src="__ICON__" alt="" width="56" height="56">
+      <div>
+        <h1 class="start-title">Timeline</h1>
+        <p class="start-lead" data-i18n="start">Time runs left to right, things sit on it, you can grab them.</p>
+      </div>
+    </header>
+
+    <div class="start-actions">
+      <button id="open-file" class="button button--primary" type="button"><span data-i18n="start">Open timeline</span> <span aria-hidden="true">&rarr;</span></button>
+      <button id="new-timeline" class="button" type="button" data-i18n="start">New timeline</button>
+      <button id="start-settings" class="icon-button" type="button" title="Settings" aria-label="Settings" data-i18n-attr="start">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+    <p class="start-hint" data-i18n="start">or drop a <code data-slot="ext">.timeline</code> file anywhere on this page</p>
+
+    <section id="shelf" class="shelf" hidden aria-labelledby="shelf-title">
+      <h2 id="shelf-title" class="section-title" data-i18n="start">Library</h2>
+      <div id="shelf-list" class="covers"></div>
+    </section>
+
+    <section id="recent" class="recent" hidden aria-labelledby="recent-title">
+      <h2 id="recent-title" class="section-title" data-i18n="start">Recent</h2>
+      <div id="recent-list" class="covers"></div>
+    </section>
+
+    <p id="update-note" class="update-note" hidden></p>
+
+    <footer class="start-about">
+      <p data-i18n="start">
+        Timeline opens, edits and saves chronologies — <code data-slot="ext">.timeline</code> files, one per
+        story: the Bible, the history of a country, of science, of your own life. The page works from
+        a disk and never touches the network; a file holds its own text and pictures, and renamed to
+        <code data-slot="zip">.zip</code> it is a folder anyone can read.
+      </p>
+      <p class="start-version"><span data-i18n="start">Version</span> <span id="version">__VERSION__</span></p>
+    </footer>
+  </div>
+</main>
+
+<!-- ============================== Timeline ============================== -->
+<div id="app" class="app" hidden>
+  <header class="toolbar" role="toolbar" aria-label="Timeline" data-i18n-attr="toolbar">
+    <button id="home" class="icon-button" type="button" title="Close and go to the start" aria-label="Close and go to the start" data-i18n-attr="toolbar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h1 class="doc-title"><span id="doc-title"></span><span id="dirty" class="dirty" title="Unsaved changes" data-i18n-attr="toolbar" hidden></span></h1>
+
+    <div class="toolbar-zoom">
+      <button id="zoom-out" class="icon-button" type="button" title="Zoom out (−)" aria-label="Zoom out" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <button id="scale" class="scale-button" type="button" aria-haspopup="menu" title="Scale" data-i18n-attr="toolbar"></button>
+      <button id="zoom-in" class="icon-button" type="button" title="Zoom in (+)" aria-label="Zoom in" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-group">
+      <button id="fit" class="text-button" type="button" title="Show everything (0)" data-i18n-attr="toolbar"><span data-i18n="toolbar">Fit all</span></button>
+      <button id="today" class="text-button" type="button" title="Go to today (T)" data-i18n-attr="toolbar"><span data-i18n="toolbar">Today</span></button>
+      <!-- Only for a timeline with music of its own: on and off, as the setting. -->
+      <button id="music-toggle" class="icon-button music-toggle" type="button" aria-pressed="true" title="Background music" aria-label="Background music" data-i18n-attr="toolbar" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="music-on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="music-off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+      </button>
+      <button id="search-button" class="icon-button" type="button" title="Search (/)" aria-label="Search" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+      </button>
+      <button id="edit-toggle" class="icon-button" type="button" title="Edit mode (E)" aria-label="Edit mode" aria-pressed="false" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+      </button>
+      <button id="more" class="icon-button" type="button" title="More" aria-label="More" aria-haspopup="menu" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Edit mode: the pencil opens the timeline's own settings; then what can be added, the eras' list, undo and redo, and a line of help that follows what you do. -->
+  <div id="edit-bar" class="edit-bar" role="toolbar" aria-label="Editing" data-i18n-attr="editbar" hidden>
+    <button id="timeline-settings" class="edit-bar-mark" type="button" title="Timeline settings" aria-label="Timeline settings" aria-haspopup="dialog" data-i18n-attr="editbar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>
+    </button>
+    <span class="edit-bar-sep" aria-hidden="true"></span>
+    <div class="edit-add" role="group" aria-label="Add" data-i18n-attr="editbar">
+      <button id="add-event" class="add-button" type="button" data-kind="event" aria-pressed="false" title="Add an event: click where it happened" data-i18n-attr="editbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="10" rx="2"/><path d="M8.5 13v4.5"/><circle cx="8.5" cy="19.5" r="1.6"/></svg>
+        <span data-i18n="editbar">Event</span>
+      </button>
+      <button id="add-period" class="add-button" type="button" data-kind="period" aria-pressed="false" title="Add a period: drag from its start to its end" data-i18n-attr="editbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="8.5" width="17" height="7" rx="2"/><path d="M4.5 9v6" stroke-width="3"/></svg>
+        <span data-i18n="editbar">Period</span>
+      </button>
+    </div>
+    <button id="edit-eras" class="add-button" type="button" aria-haspopup="dialog" title="Eras: the list of them, one after another" data-i18n-attr="editbar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5h19v9h-19z"/><path d="M9 7.5v9M15.5 7.5v9"/></svg>
+      <span data-i18n="editbar">Eras</span>
+    </button>
+    <span class="edit-bar-sep" aria-hidden="true"></span>
+    <button id="undo" class="icon-button" type="button" aria-label="Undo" data-i18n-attr="editbar" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+    </button>
+    <button id="redo" class="icon-button" type="button" aria-label="Redo" data-i18n-attr="editbar" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+    </button>
+    <p id="edit-hint" class="edit-hint" aria-live="polite"></p>
+    <button id="edit-cancel" class="text-button" type="button" hidden><span data-i18n="editbar">Cancel</span></button>
+    <button id="edit-done" class="button button--small" type="button"><span data-i18n="editbar">Done</span></button>
+  </div>
+
+  <form id="search" class="search" role="search" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+    <input id="search-input" type="search" placeholder="Search titles, texts, references" aria-label="Search" data-i18n-attr="search" autocomplete="off" spellcheck="false">
+    <span id="search-count" class="search-count" aria-live="polite"></span>
+    <button id="search-close" class="icon-button" type="button" title="Close search (Esc)" aria-label="Close search" data-i18n-attr="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <ol id="search-results" class="search-results" role="listbox" hidden></ol>
+  </form>
+
+  <section id="strip" class="strip" aria-label="Timeline strip" data-i18n-attr="strip"></section>
+  <footer id="minimap" class="minimap"></footer>
+</div>
+
+<!-- ============================== Details ============================== -->
+<aside id="details" class="details" role="dialog" aria-modal="false" aria-labelledby="details-title" hidden>
+  <div class="sheet-handle" aria-hidden="true"></div>
+  <button id="details-close" class="icon-button details-close" type="button" title="Close (Esc)" aria-label="Close" data-i18n-attr="details">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <div id="details-body" class="details-body"></div>
+</aside>
+
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<input id="file-input" type="file" accept=".timeline,.zip,.json,application/zip" hidden>
+
+<script>/*__APP__*/</script>
+</body>
+</html>
