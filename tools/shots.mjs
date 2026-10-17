@@ -39,18 +39,16 @@ const views = ats.length
 
 const chrome = await startChrome();
 try {
-  const { targetId } = await chrome.send('Target.createTarget', { url: 'about:blank' });
-  const tab = await chrome.attach(targetId, 'shots');
-  await chrome.send('Page.enable', {}, tab);
-  await chrome.viewport(tab, flag('phone') ? { width: 390, height: 844, mobile: true, scale: 2 } : { width: 1440, height: 900 });
-  if (flag('dark')) await chrome.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }, tab);
-  if (flag('ru')) await chrome.send('Emulation.setLocaleOverride', { locale: 'ru-RU' }, tab).catch(() => undefined);
-  await chrome.send('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('timeline.settings', JSON.stringify({ language: ${flag('ru') ? "'ru'" : "'en'"} })); } catch {}` }, tab);
-  await chrome.send('Page.navigate', { url: pathToFileURL(join(root, 'build', 'timeline.html')).href }, tab);
+  const tab = await chrome.open(pathToFileURL(join(root, 'build', 'timeline.html')).href, 'shots', {
+    script: `try { localStorage.setItem('timeline.settings', JSON.stringify({ language: ${flag('ru') ? "'ru'" : "'en'"} })); } catch {}`,
+    setup: async (session) => {
+      await chrome.viewport(session, flag('phone') ? { width: 390, height: 844, mobile: true, scale: 2 } : { width: 1440, height: 900 });
+      if (flag('dark')) await chrome.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }, session);
+      if (flag('ru')) await chrome.send('Emulation.setLocaleOverride', { locale: 'ru-RU' }, session).catch(() => undefined);
+    },
+  });
   await chrome.until(tab, "document.documentElement.dataset.ready === 'true'");
-  const { root: doc } = await chrome.send('DOM.getDocument', {}, tab);
-  const { nodeId } = await chrome.send('DOM.querySelector', { nodeId: doc.nodeId, selector: '#file-input' }, tab);
-  await chrome.send('DOM.setFileInputFiles', { nodeId, files: [file] }, tab);
+  await chrome.setFiles(tab, '#file-input', [file]);
   await chrome.until(tab, "!!window.timeline?.session && document.querySelectorAll('.era, .card, .bar').length > 0", 15000);
   await mkdir(dir, { recursive: true });
   const suffix = `${flag('phone') ? '-phone' : ''}${flag('dark') ? '-dark' : ''}${flag('ru') ? '-ru' : ''}`;

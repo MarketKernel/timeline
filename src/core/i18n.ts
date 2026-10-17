@@ -52,20 +52,11 @@ export function language(): Language {
   return current;
 }
 
-const listeners = new Set<() => void>();
-
-/** Called after every change of language: views that cache text redraw. */
-export function onLanguage(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
 export function setLanguage(next: Language): void {
   current = next;
   rules = new Intl.PluralRules(next);
   formats.clear();
   if (typeof document !== 'undefined') document.documentElement.lang = next;
-  for (const listener of listeners) listener();
 }
 
 type Values = Record<string, string | number>;
@@ -132,7 +123,7 @@ const contents = new WeakMap<Element, Source>();
 const attributes = new WeakMap<Element, Partial<Record<(typeof ATTRIBUTES)[number], string>>>();
 
 /** The English text of a `data-i18n` element, as the dictionaries key it. */
-export function sourceOf(element: Element): Source {
+function sourceOf(element: Element): Source {
   let source = contents.get(element);
   if (!source) {
     const slots = new Map<string, Element>();

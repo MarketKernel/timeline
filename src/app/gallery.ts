@@ -12,25 +12,13 @@
 
 import { t } from '../core/i18n';
 import type { Doc, ImageInfo } from '../core/model';
-import { h } from './dom';
+import { h, icon } from './dom';
 import type { ImageStore } from './images';
-
-function icon(...paths: string[]): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const d of paths) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    svg.append(path);
-  }
-  return svg;
-}
 
 const chevron = (side: 'left' | 'right') => icon(side === 'left' ? 'M15 18l-6-6 6-6' : 'M9 18l6-6-6-6');
 
 /** The caption and the credit (author · licence · source, linked when there is a URL). */
-export function captionOf(info: ImageInfo, className = ''): HTMLElement | null {
+function captionOf(info: ImageInfo, className = ''): HTMLElement | null {
   const credit = info.credit;
   const creditText = credit ? [credit.author, credit.license, credit.source].filter(Boolean).join(' · ') : '';
   if (!info.caption && !creditText) return null;
@@ -91,11 +79,13 @@ function thumbs(pictures: string[], store: ImageStore | null, className: string,
 
 export interface Gallery {
   el: HTMLElement;
+  /** The picture shown now. */
+  readonly shown: string;
   dispose(): void;
 }
 
-/** The pictures at the top of the details panel. */
-export function detailsGallery(doc: Doc, pictures: string[], store: ImageStore | null): Gallery {
+/** The pictures at the top of the details panel, from the one at `start`. */
+export function detailsGallery(doc: Doc, pictures: string[], store: ImageStore | null, start = 0): Gallery {
   const many = pictures.length > 1;
   let index = 0;
   const img = h('img', { class: 'details-image', alt: '', draggable: 'false' });
@@ -134,9 +124,12 @@ export function detailsGallery(doc: Doc, pictures: string[], store: ImageStore |
     event.stopPropagation();
     show(index + (event.key === 'ArrowLeft' ? -1 : 1));
   });
-  show(0);
+  show(start);
   return {
     el: h('figure', { class: `details-figure${many ? ' details-figure--gallery' : ''}` }, frame, strip, caption),
+    get shown() {
+      return pictures[index]!;
+    },
     dispose() {
       disposed = true;
       row?.dispose();
@@ -149,7 +142,7 @@ export function detailsGallery(doc: Doc, pictures: string[], store: ImageStore |
  * click beside the picture closes; `onClose` hears where it ended, so the
  * panel shows the same picture.
  */
-export function openLightbox(doc: Doc, pictures: string[], index: number, store: ImageStore | null, onClose?: (index: number) => void): void {
+function openLightbox(doc: Doc, pictures: string[], index: number, store: ImageStore | null, onClose?: (index: number) => void): void {
   const many = pictures.length > 1;
   const img = h('img', { class: 'lightbox-image', alt: '', draggable: 'false' });
   const counter = h('span', { class: 'lightbox-counter', hidden: !many });

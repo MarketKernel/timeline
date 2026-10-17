@@ -38,7 +38,15 @@ export interface Draft {
 const DB = 'timeline';
 const MAX_RECENT = 12;
 
+/** One connection for the page's life: adding a recent file alone takes a dozen transactions. */
+let connection: Promise<IDBDatabase | null> | null = null;
+
 function open(): Promise<IDBDatabase | null> {
+  connection ??= connect();
+  return connection;
+}
+
+function connect(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       const request = indexedDB.open(DB, 2);
@@ -48,10 +56,26 @@ function open(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'key' });
         if (!db.objectStoreNames.contains('misc')) db.createObjectStore('misc', { keyPath: 'key' });
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
-      request.onblocked = () => resolve(null);
+      request.onsuccess = () => {
+        const db = request.result;
+        // A newer page in another tab upgrades the database: this one lets go, and connects again when it next needs to.
+        db.onversionchange = () => {
+          db.close();
+          connection = null;
+        };
+        db.onclose = () => (connection = null);
+        resolve(db);
+      };
+      request.onerror = () => {
+        connection = null;
+        resolve(null);
+      };
+      request.onblocked = () => {
+        connection = null;
+        resolve(null);
+      };
     } catch {
+      connection = null;
       resolve(null);
     }
   });
@@ -64,16 +88,11 @@ async function run<T>(store: 'recent' | 'drafts' | 'misc', mode: IDBTransactionM
     try {
       const tx = db.transaction(store, mode);
       const request = body(tx.objectStore(store));
-      tx.oncomplete = () => {
-        db.close();
-        resolve(request ? request.result : undefined);
-      };
-      tx.onerror = tx.onabort = () => {
-        db.close();
-        resolve(undefined);
-      };
-    } catch {
-      db.close();
+      tx.oncomplete = () => resolve(request ? request.result : undefined);
+      tx.onerror = tx.onabort = () => resolve(undefined);
+    } catch (error) {
+      // The connection has gone (the browser closed it): the next call opens another. Any other error was this call's own.
+      if ((error as DOMException).name === 'InvalidStateError') connection = null;
       resolve(undefined);
     }
   });

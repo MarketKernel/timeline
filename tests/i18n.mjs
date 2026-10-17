@@ -63,7 +63,7 @@ for (const [language, dictionary] of Object.entries(all)) {
 
 // The lookup.
 check('english by default', I.t('x', 'Delete'), 'Delete');
-check('placeholders filled', I.t('x', 'Open {name}', { name: 'bible.en.timeline' }), 'Open bible.en.timeline');
+check('placeholders filled', I.t('x', 'Open {name}', { name: 'flight.en.timeline' }), 'Open flight.en.timeline');
 check('english plural: one', I.tn('x', '{count} item', '{count} items', 1), '1 item');
 check('english plural: other', I.tn('x', '{count} item', '{count} items', 3), '3 items');
 check('numbers are grouped', I.tn('x', '{count} item', '{count} items', 12000), '12,000 items');

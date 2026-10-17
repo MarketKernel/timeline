@@ -45,9 +45,18 @@ export function parseMarkdown(source: string): Paragraph[] {
     .map(inline);
 }
 
+const flat = (nodes: Inline[]): string => nodes.map((node) => (node.kind === 'text' ? node.text : node.kind === 'br' ? ' ' : flat(node.children))).join('');
+
+/** Texts already flattened: the strip asks for every card's at every build, search for every item at every key. */
+const plain = new Map<string, string>();
+
 /** The text without marks: for search, tooltips and the card's first line. */
 export function plainText(source: string): string {
-  const flat = (nodes: Inline[]): string =>
-    nodes.map((node) => (node.kind === 'text' ? node.text : node.kind === 'br' ? ' ' : flat(node.children))).join('');
-  return parseMarkdown(source).map(flat).join(' ');
+  let text = plain.get(source);
+  if (text === undefined) {
+    text = parseMarkdown(source).map(flat).join(' ');
+    if (plain.size >= 5000) plain.clear();
+    plain.set(source, text);
+  }
+  return text;
 }

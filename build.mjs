@@ -14,7 +14,7 @@
  * The version is package.json's and nowhere else: the page shows it, writes it
  * into every file it saves (meta.generator), and the PWA's cache is named after it.
  */
-import { build } from 'esbuild';
+import { build, transform } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -32,11 +32,13 @@ const PAGE_BUDGET = 400 * 1024;
 /**
  * package.json's version, and the one the page shows: the same for a build of
  * the commit tagged v<version>, with the commit added for any other —
- * 0.1.0+1a2b3c4 — so a page built from main is not taken for a release.
+ * 0.1.0+1a2b3c4 — so a page built from main is not taken for a release. And
+ * the project's home, which About links to.
  */
 async function readRelease() {
-  const { version } = JSON.parse(await readFile(at('package.json'), 'utf8'));
+  const { version, homepage } = JSON.parse(await readFile(at('package.json'), 'utf8'));
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`package.json: the version must be x.y.z, not ${version}`);
+  if (!/^https:\/\/\S+$/.test(homepage ?? '')) throw new Error(`package.json: the homepage must be an https:// address, not ${homepage}`);
   const git = (...args) => {
     try {
       return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -46,7 +48,7 @@ async function readRelease() {
   };
   const tagged = process.env.RELEASE_TAG === `v${version}` || git('tag', '--points-at', 'HEAD').split('\n').includes(`v${version}`);
   const commit = tagged ? '' : git('rev-parse', '--short', 'HEAD');
-  return { version, label: commit ? `${version}+${commit}` : version };
+  return { version, label: commit ? `${version}+${commit}` : version, homepage };
 }
 
 /** Set by buildOnce() before anything is bundled. */
@@ -78,9 +80,7 @@ async function bundle(entry) {
     sourcemap: false,
     legalComments: 'none',
     charset: 'utf8',
-    define: { __APP_VERSION__: JSON.stringify(release.label) },
-    // Glyphs and the icon are imported as text and inlined.
-    loader: { '.svg': 'text' },
+    define: { __APP_VERSION__: JSON.stringify(release.label), __APP_HOME__: JSON.stringify(release.homepage) },
     write: false,
   });
   const output = result.outputFiles[0];
@@ -90,6 +90,7 @@ async function bundle(entry) {
 
 /** The whole point of the build: nothing may be fetched at runtime. */
 export function assertSelfContained(html) {
+  /** @type {[RegExp, string][]} */
   const offenders = [
     [/<script\b[^>]*\ssrc=/i, '<script src=…>'],
     [/<link[^>]+href=["'](?!data:)/i, '<link href=…>'],
@@ -166,7 +167,7 @@ async function buildPages(html) {
   const manifest = {
     name: 'Timeline',
     short_name: 'Timeline',
-    description: 'Chronologies to read and edit: the Bible, histories, your own life',
+    description: 'Chronologies to read and edit: world history, a country, science, your own life',
     id: './',
     start_url: './',
     scope: './',
@@ -206,9 +207,11 @@ async function buildOnce() {
     bundle('src/app/main.ts'),
   ]);
   assertScriptCloses(appJs);
+  // No target: color-mix() and :has() stay as written, the comments and the whitespace go.
+  const css = watch ? styles : (await transform(styles, { loader: 'css', minify: true, logLevel: 'silent' })).code;
 
   const html = pinScript(template
-    .replace('/*__STYLES__*/', () => styles)
+    .replace('/*__STYLES__*/', () => css)
     .replace('/*__APP__*/', () => guard(appJs))
     .replaceAll('__ICON__', () => dataUri(icon))
     .replaceAll('__VERSION__', () => release.label),
@@ -216,12 +219,17 @@ async function buildOnce() {
 
   assertSelfContained(html);
   const size = Buffer.byteLength(html, 'utf8');
-  if (size > PAGE_BUDGET) throw new Error(`build/timeline.html is ${size} bytes, over the ${PAGE_BUDGET}-byte budget`);
+  // The budget is the shipped page's: --watch builds it unminified, and only says so.
+  if (size > PAGE_BUDGET) {
+    const over = `build/timeline.html is ${size} bytes, over the ${PAGE_BUDGET}-byte budget`;
+    if (!watch) throw new Error(over);
+    console.warn(`${over} (unminified, --watch)`);
+  }
 
   await mkdir(at('build'), { recursive: true });
   await writeFile(outFile, html, 'utf8');
   const kb = (n) => (n / 1024).toFixed(1);
-  console.log(`build/timeline.html ${release.label} — ${kb(size)} KB (code ${kb(appJs.length)} KB, styles ${kb(styles.length)} KB)`);
+  console.log(`build/timeline.html ${release.label} — ${kb(size)} KB (code ${kb(appJs.length)} KB, styles ${kb(css.length)} KB)`);
   await buildPages(html);
 }
 

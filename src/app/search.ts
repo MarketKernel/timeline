@@ -59,10 +59,14 @@ export class SearchBar {
   }
 
   close(): void {
+    // A search typed just before closing must not run after it.
+    clearTimeout(this.timer);
     this.form.hidden = true;
     this.list.hidden = true;
     this.input.value = '';
+    this.input.removeAttribute('aria-activedescendant');
     this.hits = [];
+    this.index = -1;
     this.count.textContent = '';
     this.handlers.highlight(null);
   }

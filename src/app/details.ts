@@ -11,7 +11,7 @@
 import { formatDuration, formatRange, formatSpread, formatWhen, isNow } from '../core/dates';
 import { t } from '../core/i18n';
 import { parseMarkdown, type Inline } from '../core/markdown';
-import { colorOf, compareItems, picturesOf, spanOf, type Doc, type Item } from '../core/model';
+import { colorOf, picturesOf, spanOf, type Doc, type Item } from '../core/model';
 import { byId, h } from './dom';
 import { detailsGallery, type Gallery } from './gallery';
 import type { ImageStore } from './images';
@@ -25,6 +25,8 @@ export interface DetailsHandlers {
   close(): void;
   /** Whether edit mode is on: Edit and "count from here" appear only then. */
   editing(): boolean;
+  /** Every item in time order. */
+  ordered(): readonly Item[];
 }
 
 function renderInline(nodes: Inline[]): Node[] {
@@ -45,7 +47,7 @@ function renderInline(nodes: Inline[]): Node[] {
   });
 }
 
-export function renderText(source: string): Node[] {
+function renderText(source: string): Node[] {
   return parseMarkdown(source).map((paragraph) => h('p', {}, ...renderInline(paragraph)));
 }
 
@@ -73,6 +75,10 @@ export class Details {
   }
 
   show(doc: Doc, item: Item, store: ImageStore | null, focus = false): void {
+    // The same item again (an edit elsewhere, a save, the language): the reader stays where they were in it.
+    const again = this.open && this.current === item.id;
+    const scrolled = again ? this.body.scrollTop : 0;
+    const shown = again ? this.gallery?.shown : undefined;
     this.current = item.id;
     const parts: Node[] = [];
 
@@ -80,7 +86,7 @@ export class Details {
     this.gallery = null;
     const pictures = picturesOf(item).filter((hash) => doc.images[hash]);
     if (pictures.length) {
-      this.gallery = detailsGallery(doc, pictures, store);
+      this.gallery = detailsGallery(doc, pictures, store, shown ? Math.max(0, pictures.indexOf(shown)) : 0);
       parts.push(this.gallery.el);
     }
 
@@ -120,7 +126,7 @@ export class Details {
     parts.push(h('div', { class: 'details-meta' }, ...meta));
 
     // Previous and next in time.
-    const sorted = [...doc.items].sort(compareItems);
+    const sorted = this.handlers.ordered();
     const i = sorted.findIndex((x) => x.id === item.id);
     const prev = sorted[i - 1];
     const next = sorted[i + 1];
@@ -141,7 +147,7 @@ export class Details {
     if (actions.childElementCount) parts.push(actions);
 
     this.body.replaceChildren(...parts);
-    this.body.scrollTop = 0;
+    this.body.scrollTop = scrolled;
     this.panel.hidden = false;
     document.body.classList.add('details-open');
     if (focus) byId('details-close').focus();

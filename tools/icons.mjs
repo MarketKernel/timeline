@@ -10,17 +10,17 @@ import { root } from './load.mjs';
 
 const svg = await readFile(join(root, 'assets', 'icon.svg'), 'utf8');
 const uri = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+/** @type {[string, number, number, boolean][]} */
 const sizes = [
   ['icon-192.png', 192, 0, false],
   ['icon-512.png', 512, 0, false],
-  // Maskable: the icon inside the safe zone (80 %), on the paper colour edge to edge.
+  // Maskable: the icon inside the safe zone (80 %), on its own paper colour (icon.svg's #f3ead8) edge to edge.
   ['icon-maskable-512.png', 512, 0.1, true],
   ['apple-touch-icon.png', 180, 0, true],
 ];
 const chrome = await startChrome();
 try {
-  const { targetId } = await chrome.send('Target.createTarget', { url: 'about:blank' });
-  const tab = await chrome.attach(targetId, 'icons');
+  const tab = await chrome.open('about:blank', 'icons');
   await chrome.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } }, tab);
   for (const [name, size, pad, fill] of sizes) {
     await chrome.send('Emulation.setDeviceMetricsOverride', { width: size, height: size, deviceScaleFactor: 1, mobile: false }, tab);

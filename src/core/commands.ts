@@ -10,7 +10,7 @@
 
 import type { Doc, ImageInfo, Item } from './model';
 
-type DocField = 'lang' | 'title' | 'description' | 'sources' | 'start' | 'end' | 'cover' | 'anchor' | 'style' | 'music' | 'view' | 'meta';
+type DocField = 'lang' | 'title' | 'description' | 'sources' | 'author' | 'start' | 'end' | 'cover' | 'anchor' | 'style' | 'music' | 'view' | 'meta';
 
 export type Change =
   | { target: 'item'; id: string; before?: Item; after?: Item; index: number }
@@ -18,7 +18,7 @@ export type Change =
   | { target: 'doc'; id: DocField; before: unknown; after: unknown };
 
 export interface Command {
-  /** What the undo button says: "Move Exodus", "Delete 3 items". */
+  /** What the undo button says: "Move Sputnik", "Delete 3 items". */
   label: string;
   changes: Change[];
 }
@@ -70,7 +70,7 @@ function put(doc: Doc, change: Change, value: unknown): void {
 }
 
 /** Applies a command forwards, or backwards (in reverse order) to undo it. */
-export function applyCommand(doc: Doc, command: Command, forward = true): void {
+function applyCommand(doc: Doc, command: Command, forward = true): void {
   const changes = forward ? command.changes : [...command.changes].reverse();
   for (const change of changes) put(doc, change, forward ? change.after : change.before);
 }
@@ -80,20 +80,21 @@ export class History {
   private undone: Command[] = [];
   /** How many commands deep the last save was; -1 when it can no longer be reached. */
   private savedAt = 0;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = new Set<(edited: boolean) => void>();
 
   constructor(
     readonly doc: Doc,
     readonly limit = 100,
   ) {}
 
-  onChange(listener: () => void): () => void {
+  /** `edited` is false when only the saved state changed: the document itself is as it was. */
+  onChange(listener: (edited: boolean) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  private notify(): void {
-    for (const listener of this.listeners) listener();
+  private notify(edited = true): void {
+    for (const listener of this.listeners) listener(edited);
   }
 
   /** Applies and records a command; nothing happens for one with no changes. */
@@ -143,7 +144,7 @@ export class History {
 
   /** The label of what undo would take back. */
   get undoLabel(): string | null {
-    return this.done.at(-1)?.label ?? null;
+    return this.top?.label ?? null;
   }
 
   get redoLabel(): string | null {
@@ -152,7 +153,7 @@ export class History {
 
   markSaved(): void {
     this.savedAt = this.done.length;
-    this.notify();
+    this.notify(false);
   }
 
   /** Marks the document as changed though no command was run (a restored draft). */

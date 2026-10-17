@@ -33,7 +33,7 @@ await writeFile(samplePath, await sampleTimeline());
 const bigPath = join(work, 'big.timeline');
 await writeFile(bigPath, await bigTimeline(1000, 500));
 
-const { version } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const { version, homepage } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 
 /** The same page over http, where OPFS works: it stands in for the system's file dialogs. */
 const server = createServer(async (req, res) => {
@@ -46,8 +46,8 @@ const server = createServer(async (req, res) => {
   const type = file.endsWith('.html') ? 'text/html; charset=utf-8' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.json') || file.endsWith('.webmanifest') ? 'application/json' : 'application/octet-stream';
   res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' }).end(await readFile(file));
 });
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`;
+await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+const origin = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}`;
 
 /** File dialogs answered from OPFS: window.__pick names the file the next one returns. */
 const PICKERS = `(() => {
@@ -57,14 +57,7 @@ const PICKERS = `(() => {
   window.showOpenFilePicker = async () => [await (await root()).getFileHandle(window.__pick)];
 })();`;
 
-async function openTab(url) {
-  const { targetId } = await chrome.send('Target.createTarget', { url: 'about:blank' });
-  const session = await chrome.attach(targetId, url);
-  await chrome.send('Page.enable', {}, session);
-  await chrome.send('Page.addScriptToEvaluateOnNewDocument', { source: PICKERS }, session);
-  await chrome.send('Page.navigate', { url }, session);
-  return session;
-}
+const openTab = (url) => chrome.open(url, url, { script: PICKERS });
 
 /** Reads a file from the page's OPFS as bytes. */
 async function opfsBytes(session, name) {
@@ -86,11 +79,7 @@ const shot = async (session, name) => {
 const ev = (session, expression) => chrome.evaluate(session, expression);
 
 /** Puts a file into the hidden <input type=file>, as the Open button's fallback does. */
-async function openViaInput(session, path, selector = '#file-input') {
-  const { root: doc } = await chrome.send('DOM.getDocument', {}, session);
-  const { nodeId } = await chrome.send('DOM.querySelector', { nodeId: doc.nodeId, selector }, session);
-  await chrome.send('DOM.setFileInputFiles', { nodeId, files: [path] }, session);
-}
+const openViaInput = (session, path, selector = '#file-input') => chrome.setFiles(session, selector, [path]);
 
 /** Half a second of a quiet tone as a WAV: background music for the tests. */
 function toneWav() {
@@ -118,12 +107,17 @@ try {
   const disk = await chrome.open(pathToFileURL(page).href, 'file');
   check('the script runs from file://', await chrome.until(disk, "document.documentElement.dataset.ready === 'true'"), true);
   check('the version is shown', (await ev(disk, "document.getElementById('version').textContent")).startsWith(version), true);
+  check('…and beside it where the project lives, a link that opens in a new tab', await ev(disk, "(() => { const a = document.querySelector('.start-version .home-link'); return [a?.href, a?.target, a?.rel]; })()"), [homepage, '_blank', 'noopener noreferrer']);
   check('nothing was fetched', await ev(disk, "performance.getEntriesByType('resource').length"), 0);
   await openViaInput(disk, samplePath);
   check('a file opens from file://', await chrome.until(disk, "document.querySelectorAll('.card').length > 0"), true);
   check('no errors from file://', chrome.errors, []);
 
   const tab = await openTab(`${origin}/timeline.html`);
+  /** Waits for the strip to come to rest — an animation, inertia, the rebuild after it — instead of a fixed pause. */
+  const settled = async () => {
+    if (!(await chrome.until(tab, 'timeline.strip.idle'))) check('the strip comes to rest', false, true);
+  };
   await chrome.viewport(tab, { width: 1280, height: 800 });
   check('the script ran', await chrome.until(tab, "document.documentElement.dataset.ready === 'true'"), true);
   await shot(tab, '01-start');
@@ -132,7 +126,7 @@ try {
   await openViaInput(tab, samplePath);
   check('the file opens', await chrome.until(tab, "!document.getElementById('app').hidden && document.querySelectorAll('.card').length > 0"), true);
   check('the title is shown', await ev(tab, "document.getElementById('doc-title').textContent"), 'A short history of flight');
-  await sleep(300);
+  await settled();
   const cards = await ev(tab, "[...document.querySelectorAll('.card')].map(c => c.dataset.id)");
   check('fit all shows the large and huge cards, every one of them, and nothing else', await ev(tab, "(() => { const big = timeline.session.doc.items.filter(i => i.kind === 'event' && (i.size === 'large' || i.size === 'huge')).map(i => i.id).sort(); return JSON.stringify([...document.querySelectorAll('.card')].map(c => c.dataset.id).sort()) === JSON.stringify(big) && big.length >= 4; })()"), true);
   check('eras are drawn', await ev(tab, "document.querySelectorAll('.era').length"), 6);
@@ -157,7 +151,7 @@ try {
     await chrome.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: box[0] + box[2] * 0.75, y: box[1] + 100, deltaX: 0, deltaY: -120, modifiers: 2 }, tab);
     await sleep(40);
   }
-  await sleep(400);
+  await settled();
   const more = await ev(tab, "document.querySelectorAll('.card').length");
   check('zooming in shows more cards', more > cards.length, true);
   await shot(tab, '03-zoomed');
@@ -169,12 +163,12 @@ try {
   }
   await chrome.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box[0] + 900, y: box[1] + 60, button: 'left', clickCount: 1 }, tab);
   const after = await ev(tab, "document.querySelector('.ruler-layer').style.transform + document.querySelector('.ruler .tick-label')?.textContent");
-  await sleep(1500);
+  await settled();
   check('dragging pans', before !== after, true);
 
   // Labels of long bars and eras stay at the left edge with every frame of a pan, not only after it.
   await ev(tab, `timeline.strip.goTo(${1960 * 365.2425}, 0.06, false)`);
-  await sleep(400);
+  await settled();
   const drift = await ev(tab, `(() => {
     const s = timeline.strip;
     const labels = ['.bar[data-id="aviation-age"] .bar-label', '.era[data-id="era-golden"] .era-label'].map((q) => document.querySelector(q));
@@ -190,7 +184,7 @@ try {
 
   // The strip starts at the first date: a small margin before it, and no ruler there.
   await ev(tab, `timeline.strip.goTo(${1780 * 365.2425}, 0.3, false)`);
-  await sleep(300);
+  await settled();
   const edge = await ev(tab, `(() => {
     const s = timeline.strip;
     s.setView({ ...s.view, center: s.view.center - 5000 / s.view.pxPerDay });
@@ -200,9 +194,9 @@ try {
 
   // Keyboard: 0 fits, T goes to today, + zooms.
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Home', code: 'Home', windowsVirtualKeyCode: 36 }, tab);
-  await sleep(500);
+  await settled();
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: '0', code: 'Digit0', text: '0', windowsVirtualKeyCode: 48 }, tab);
-  await sleep(500);
+  await settled();
   check('0 fits all again', await ev(tab, "document.querySelectorAll('.era').length"), 6);
   // The scale picker offers the presets and nothing else — only those the file can be shown at.
   await chrome.click(tab, '#scale');
@@ -210,7 +204,7 @@ try {
   await ev(tab, "[...document.querySelectorAll('.menu--scale .menu-item')].find(b => b.textContent.trim() === '1 px = 1 year').click()");
   check('…a pick zooms to it, and the button says so', await chrome.until(tab, "document.getElementById('scale').textContent === '1 px = 1 year'"), true);
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: '0', code: 'Digit0', text: '0', windowsVirtualKeyCode: 48 }, tab);
-  await sleep(500);
+  await settled();
 
   // Reading: a click opens the details; search finds; Tab walks in time order; Esc steps back.
   await chrome.click(tab, '.card[data-id="moon"]');
@@ -255,31 +249,44 @@ try {
   await sleep(300);
   await shot(tab, '07-russian');
   await chrome.click(tab, '#more');
-  await ev(tab, "[...document.querySelectorAll('.menu-item')].at(-2).click()");
+  await ev(tab, "[...document.querySelectorAll('.menu-item')].find(b => b.textContent.includes('Настройки')).click()");
   await chrome.until(tab, "!!document.querySelector('dialog[open] #setting-language')");
   await ev(tab, "(() => { const s = document.getElementById('setting-language'); s.value = 'en'; s.dispatchEvent(new Event('change')); document.querySelector('dialog[open] .button--primary').click(); })()");
   check('back to English', await chrome.until(tab, "document.documentElement.lang === 'en'"), true);
 
-  // Editing: drag a card's date, undo it, add an event with N, save, reopen.
+  // About: last in the menu before Close — the version and where the project lives.
+  await chrome.click(tab, '#more');
+  check('About is the last item before Close', await ev(tab, "[...document.querySelectorAll('.menu-item')].slice(-2).map(b => b.textContent)"), ['About Timeline', 'Close']);
+  await ev(tab, "[...document.querySelectorAll('.menu-item')].find(b => b.textContent === 'About Timeline').click()");
+  check('…it shows the version and links to the project', await chrome.until(tab, `(() => { const d = document.querySelector('dialog[open] .about'); return !!d && d.textContent.includes(${JSON.stringify(version)}) && d.querySelector('.home-link')?.href === ${JSON.stringify(homepage)}; })()`), true);
+  await shot(tab, '22-about');
+  await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  await chrome.until(tab, "!document.querySelector('dialog[open]')");
+
+  // Editing: move a card (its date stays), undo it, add an event with N, save, reopen.
   const key = (k, code, vk, text) => chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, ...(text ? { text } : {}) }, tab);
   await ev(tab, "document.activeElement?.blur()");
   await key('e', 'KeyE', 69, 'e');
   check('E turns edit mode on', await chrome.until(tab, "document.getElementById('edit-toggle').getAttribute('aria-pressed') === 'true'"), true);
   await chrome.until(tab, "!!document.querySelector('.card[data-id=wright]')");
-  const card = await ev(tab, "(() => { const r = document.querySelector('.card[data-id=wright]').getBoundingClientRect(); return [r.left + 40, r.bottom - 12]; })()");
+  const card = await ev(tab, "(() => { const r = document.querySelector('.card[data-id=wright]').getBoundingClientRect(); return [r.left + 40, r.bottom - 12, r.left]; })()");
   const dateBefore = await ev(tab, "document.querySelector('.card[data-id=wright] .card-date').textContent");
+  const startBefore = await ev(tab, "JSON.stringify(timeline.session.doc.items.find(i => i.id === 'wright').start)");
   await chrome.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: card[0], y: card[1], button: 'left', clickCount: 1 }, tab);
   for (let i = 1; i <= 8; i++) {
     await chrome.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: card[0] + i * 15, y: card[1], button: 'left', buttons: 1 }, tab);
     await sleep(20);
   }
-  check('dragging shows the new date', await ev(tab, "document.querySelector('.drag-tip')?.textContent ?? ''") !== '', true);
+  check('dragging shows the date the card keeps', (await ev(tab, "document.querySelector('.drag-tip')?.textContent ?? ''")).startsWith(dateBefore), true);
   await chrome.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: card[0] + 120, y: card[1], button: 'left', clickCount: 1 }, tab);
-  check('a dragged card has a new date', await chrome.until(tab, `document.querySelector('.card[data-id=wright] .card-date')?.textContent !== ${JSON.stringify(dateBefore)}`), true);
+  check('a dragged card moves, its date does not', await chrome.until(tab, `(() => { const i = timeline.session.doc.items.find(i => i.id === 'wright'); return i.shift === 120 && JSON.stringify(i.start) === ${JSON.stringify(startBefore)}; })()`), true);
+  check('…it stands where it was put, its line leaning to its dot', await chrome.until(tab, `(() => { const c = document.querySelector('.card[data-id=wright]'); return Math.abs(c.getBoundingClientRect().left - ${card[2] + 120}) < 2 && c.querySelector('.card-date').textContent === ${JSON.stringify(dateBefore)}; })()`), true);
+  check('…the pointer leans', await ev(tab, "[...document.querySelectorAll('.pointer')].some(p => p.style.transform.startsWith('rotate('))"), true);
+  await shot(tab, '23-moved-card');
   check('the title shows unsaved changes', await ev(tab, "!document.getElementById('dirty').hidden"), true);
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 4 }, tab);
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 2 }, tab);
-  check('undo puts it back', await chrome.until(tab, `document.querySelector('.card[data-id=wright] .card-date')?.textContent === ${JSON.stringify(dateBefore)} && document.getElementById('dirty').hidden`), true);
+  check('undo puts it back', await chrome.until(tab, `timeline.session.doc.items.find(i => i.id === 'wright').shift === undefined && Math.abs(document.querySelector('.card[data-id=wright]').getBoundingClientRect().left - ${card[2]}) < 2 && document.getElementById('dirty').hidden`), true);
 
   await ev(tab, "document.activeElement?.blur()");
   await key('n', 'KeyN', 78, 'n');
@@ -324,7 +331,7 @@ try {
     await mouse('mouseReleased', x + dx, y + dy);
   };
   await ev(tab, `timeline.strip.goTo(${1960 * 365.2425}, 0.06, false)`);
-  await sleep(400);
+  await settled();
   check('the edit bar is shown in edit mode', await ev(tab, "!document.getElementById('edit-bar').hidden && !!document.querySelector('.add-button[data-kind=period]')"), true);
   await chrome.click(tab, '#add-event');
   check('a kind is picked', await ev(tab, "document.body.classList.contains('placing') && document.getElementById('add-event').getAttribute('aria-pressed') === 'true'"), true);
@@ -335,7 +342,7 @@ try {
   check('…at the date clicked', Math.abs((await ev(tab, "Number(document.querySelector('dialog[open] .date-year').value)")) - (clickDay / 365.2425 + 1)) < 1.5, true);
   check('…with the title in focus', await ev(tab, "document.activeElement?.id === 'edit-title'"), true);
   await ev(tab, "document.querySelector('dialog[open]').close()");
-  await sleep(100);
+  await chrome.until(tab, "!document.querySelector('dialog[open]')");
 
   // A period drawn over the bars, in a colour of the system picker's.
   await chrome.click(tab, '#add-period');
@@ -396,6 +403,16 @@ try {
   check('…drawn there, the others making room', await chrome.until(tab, `Math.abs(document.querySelector('.bar[data-id=apollo]').getBoundingClientRect().top - document.querySelector('.bars-inner').getBoundingClientRect().top - ${apollo[3]}) < 4`), true);
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 2 }, tab);
   check('…and undo takes it back', await chrome.until(tab, "timeline.session.doc.items.find(i => i.id === 'apollo').lane === undefined"), true);
+  // Sideways — in its middle or by an end — a bar keeps its dates: they are set in its window.
+  const apolloBefore = await ev(tab, "JSON.stringify(timeline.session.doc.items.find(i => i.id === 'apollo'))");
+  const undoBefore = await ev(tab, "document.getElementById('undo').title");
+  const bar = await ev(tab, "(() => { const b = document.querySelector('.bar[data-id=apollo]').getBoundingClientRect(); return [b.left + b.width / 2, b.right - 2, b.top + b.height / 2]; })()");
+  const barCentre = await ev(tab, 'timeline.strip.view.center');
+  await dragFrom(bar[0], bar[2], 120, 0, 8);
+  await dragFrom(bar[1], bar[2], 80, 0, 8);
+  await settled();
+  check('a bar dragged sideways, or by its end, keeps its dates, and nothing is done', await ev(tab, `[JSON.stringify(timeline.session.doc.items.find(i => i.id === 'apollo')) === ${JSON.stringify(apolloBefore)}, document.getElementById('undo').title === ${JSON.stringify(undoBefore)}]`), [true, true]);
+  check('…the drag was the bar’s: the strip did not pan', await ev(tab, 'timeline.strip.view.center'), barCentre);
   const sputnik = await ev(tab, "(() => { const r = document.querySelector('.card[data-id=sputnik]').getBoundingClientRect(); return [r.left + 30, r.bottom - 10, timeline.strip.placed.get('sputnik').row]; })()");
   await dragFrom(sputnik[0], sputnik[1], 3, -24 * 3, 8);
   check('a card dragged up takes the row it is dropped in', await chrome.until(tab, `timeline.session.doc.items.find(i => i.id === 'sputnik').lane === ${sputnik[2] + 3} && timeline.strip.placed.get('sputnik').row > ${sputnik[2]}`), true);
@@ -403,7 +420,7 @@ try {
 
   // A gallery: a mosaic on a large card, thumbs and arrows in the details, full screen.
   await ev(tab, `timeline.strip.goTo(${1969.6 * 365.2425}, 0.2, false)`);
-  await sleep(300);
+  await settled();
   check('a large card shows its gallery as a mosaic', await chrome.until(tab, "document.querySelectorAll('.card[data-id=moon] .card-mosaic img').length === 3"), true);
   check('…and the large image, not the thumb', await chrome.until(tab, "[...document.querySelectorAll('.card[data-id=moon] .card-image')].every(i => i.src.startsWith('blob:'))"), true);
   await chrome.click(tab, '.card[data-id=moon]');
@@ -448,9 +465,9 @@ try {
 
   // The corner of a card makes it larger.
   await ev(tab, `timeline.strip.goTo(${1960 * 365.2425}, 0.06, false)`);
-  await sleep(300);
+  await settled();
   await ev(tab, "timeline.strip.selected = 'gagarin-flight'; timeline.strip.refresh()");
-  await sleep(200);
+  await settled();
   const corner = await ev(tab, "(() => { const r = document.querySelector('.card[data-id=\"gagarin-flight\"] .card-resize').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
   await dragFrom(corner[0], corner[1], 90, -10, 6);
   check('dragging a large card’s corner makes it huge', await chrome.until(tab, "timeline.session.doc.items.find(i => i.id === 'gagarin-flight').size === 'huge'"), true);
@@ -471,8 +488,14 @@ try {
   await openViaInput(tab, musicPath, '#timeline-music-input');
   check('…music chosen, named after its file', await chrome.until(tab, "document.querySelector('dialog[open] #timeline-music-title')?.value === 'air' && /WAV/.test(document.querySelector('dialog[open] .music-name').textContent)"), true);
   await ev(tab, "(() => { const t = document.querySelector('dialog[open] #timeline-music-title'); t.value = 'A quiet tone'; })()");
+  // The author: optional, a website only as a web address (the browser itself turns away what is not an address at all).
+  await ev(tab, "(() => { const d = document.querySelector('dialog[open]'); d.querySelector('#timeline-author-name').value = 'Anna Petrova'; d.querySelector('#timeline-author-url').value = 'ftp://anna.example.org'; d.querySelector('#timeline-author-contact').value = 'anna@example.org'; })()");
+  await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  check('…a website that is not a web address is refused, and the form stays', await ev(tab, "[!!document.querySelector('dialog[open] #timeline-title'), document.querySelector('dialog[open] .form-error').textContent]"), [true, 'The website must start with https:// or http://']);
+  await ev(tab, "document.querySelector('dialog[open] #timeline-author-url').value = 'https://anna.example.org'");
   await shot(tab, '16-timeline-settings');
   await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  check('…the author is kept in the file', await chrome.until(tab, "JSON.stringify(timeline.session.doc.author) === JSON.stringify({ name: 'Anna Petrova', url: 'https://anna.example.org', contact: 'anna@example.org' })"), true);
   check('…the music is the file’s, and plays', await chrome.until(tab, "timeline.session.doc.music?.ext === 'wav' && timeline.session.doc.music.title === 'A quiet tone' && !document.getElementById('music-toggle').hidden"), true);
   // A browser may wait for the reader's hand before sound: a click on the title is one.
   await chrome.click(tab, '#doc-title');
@@ -486,7 +509,7 @@ try {
   const viewBefore = await ev(tab, 'timeline.strip.view');
   await ev(tab, "timeline.strip.setView({ ...timeline.strip.view, center: 1e8 })");
   check('…with an end the strip stops there, as at the start', await ev(tab, "(() => { const v = timeline.strip.view; return Math.abs(v.center + v.width / 2 / v.pxPerDay - (timeline.strip.extentDays[1] + timeline.strip.margins(v.pxPerDay)[1] / v.pxPerDay)) < 1 / v.pxPerDay; })()"), true);
-  await sleep(300);
+  await settled();
   check('…leaving room for the last event’s card: it is whole on the screen', await chrome.until(tab, `(() => {
     const strip = document.getElementById('strip').getBoundingClientRect();
     const cards = [...document.querySelectorAll('.card')];
@@ -559,7 +582,7 @@ try {
   check('reopening finds the event', await chrome.until(tab, "document.getElementById('doc-title').textContent === 'A short history of flight' && !document.getElementById('app').hidden"), true);
   await key('e', 'KeyE', 69, 'e');
   await key('0', 'Digit0', 48, '0');
-  await sleep(500);
+  await settled();
   check('the saved event is in the reopened file', await ev(tab, "[...document.querySelectorAll('.card, .dot')].some(el => el.textContent.includes('A test event') || el.title?.includes('A test event'))"), true);
   check('…with its colour', await ev(tab, "timeline.session.doc.items.find(i => i.title === 'A test event')?.color"), '#7b5e8a');
   await key('e', 'KeyE', 69, 'e');
@@ -645,7 +668,7 @@ try {
     await sleep(150);
     check(`${label}: E does not turn edit mode on`, await ev(reader, "[timeline.editing, document.getElementById('edit-bar').hidden]"), [false, true]);
     await chrome.click(reader, '#more');
-    check(`${label}: the menu has printing and settings only`, await ev(reader, "[...document.querySelectorAll('.menu-item')].map(b => b.textContent)"), ['Print or save as PDF', 'Settings']);
+    check(`${label}: the menu has printing, settings and About only`, await ev(reader, "[...document.querySelectorAll('.menu-item')].map(b => b.textContent)"), ['Print or save as PDF', 'Settings', 'About Timeline']);
     await ev(reader, "document.querySelector('.menu-item').closest('.menu') && document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
     await chrome.click(reader, '.card');
     check(`${label}: a card opens its details, with no Edit`, await chrome.until(reader, "!document.getElementById('details').hidden && ![...document.querySelectorAll('#details button')].some(b => b.textContent === 'Edit')"), true);
@@ -707,10 +730,9 @@ try {
   // A phone, dark, by touch.
   await chrome.viewport(tab, { width: 390, height: 844, mobile: true, scale: 2 });
   await chrome.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }, tab);
-  await sleep(600);
-  check('dark paper follows the system', await ev(tab, 'getComputedStyle(document.body).backgroundColor'), 'rgb(29, 24, 20)');
+  check('dark paper follows the system', await chrome.until(tab, "getComputedStyle(document.body).backgroundColor === 'rgb(29, 24, 20)'"), true);
   await ev(tab, 'timeline.strip.fit(false)');
-  await sleep(200);
+  await settled();
   const centreBefore = await ev(tab, 'timeline.strip.view.center');
   const touch = (type, points) => chrome.send('Input.dispatchTouchEvent', { type, touchPoints: points }, tab);
   await touch('touchStart', [{ x: 300, y: 300 }]);
@@ -719,7 +741,7 @@ try {
     await sleep(16);
   }
   await touch('touchEnd', []);
-  await sleep(300);
+  await settled();
   check('a finger pans', (await ev(tab, 'timeline.strip.view.center')) !== centreBefore, true);
   const pxBefore = await ev(tab, 'timeline.strip.view.pxPerDay');
   await touch('touchStart', [{ x: 150, y: 300, id: 1 }, { x: 240, y: 300, id: 2 }]);
@@ -728,7 +750,7 @@ try {
     await sleep(16);
   }
   await touch('touchEnd', []);
-  await sleep(300);
+  await settled();
   check('a pinch zooms in', (await ev(tab, 'timeline.strip.view.pxPerDay')) > pxBefore, true);
   await shot(tab, '04-phone-dark');
   await chrome.viewport(tab, { width: 1280, height: 800 });

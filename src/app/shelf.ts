@@ -13,26 +13,12 @@
  */
 
 import { language, LANGUAGES, t, tn } from '../core/i18n';
+import { shelfGroups, type LibraryEntry } from '../core/library';
 import { byId, h } from './dom';
+import { sizeText } from './files';
 import { openFile } from './session';
 import { toast } from './ui';
 import { isPwa } from './update';
-
-interface ShelfEntry {
-  id: string;
-  /** The chronology this file is one language of: one key for all its language files. */
-  group: string;
-  lang: string;
-  file: string;
-  title: string;
-  description: string;
-  kind: string;
-  span: string;
-  items: number;
-  images: number;
-  size: number;
-  cover: string | null;
-}
 
 const LIBRARY = 'timeline-library';
 const base = () => new URL('library/', location.href);
@@ -46,7 +32,7 @@ async function kept(): Promise<Set<string>> {
   }
 }
 
-async function keepOffline(entry: ShelfEntry, keep: boolean): Promise<boolean> {
+async function keepOffline(entry: LibraryEntry, keep: boolean): Promise<boolean> {
   const cache = await caches.open(LIBRARY);
   const urls = [new URL(entry.file, base()).href, ...(entry.cover ? [new URL(entry.cover, base()).href] : [])];
   if (!keep) {
@@ -64,7 +50,7 @@ async function keepOffline(entry: ShelfEntry, keep: boolean): Promise<boolean> {
   }
 }
 
-async function open(entry: ShelfEntry): Promise<void> {
+async function open(entry: LibraryEntry): Promise<void> {
   const close = toast(t('shelf', 'Opening {name}…', { name: entry.title }), { duration: 0 });
   try {
     const response = await fetch(new URL(entry.file, base()));
@@ -78,16 +64,8 @@ async function open(entry: ShelfEntry): Promise<void> {
   }
 }
 
-const mb = (bytes: number) => (bytes < 1 << 20 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
-
 /** A language's own name where the interface knows it, else its code. */
 const languageName = (lang: string): string => (LANGUAGES as Record<string, string>)[lang] ?? lang.toUpperCase();
-
-/** The file to show for a chronology: in the interface's language, else English, else the first. */
-function preferred(files: ShelfEntry[]): ShelfEntry {
-  const lang = language();
-  return files.find((f) => f.lang === lang) ?? files.find((f) => f.lang.split('-')[0] === lang) ?? files.find((f) => f.lang === 'en') ?? files[0]!;
-}
 
 export async function renderShelf(): Promise<void> {
   const section = byId('shelf');
@@ -95,24 +73,18 @@ export async function renderShelf(): Promise<void> {
     section.hidden = true;
     return;
   }
-  let entries: ShelfEntry[];
+  let entries: LibraryEntry[];
   try {
     const response = await fetch(new URL('index.json', base()));
-    entries = ((await response.json()) as { files: ShelfEntry[] }).files;
+    entries = ((await response.json()) as { files: LibraryEntry[] }).files;
   } catch {
     section.hidden = true;
     return;
   }
-  const groups = new Map<string, ShelfEntry[]>();
-  for (const entry of entries) {
-    const key = entry.group ?? entry.id;
-    groups.set(key, [...(groups.get(key) ?? []), entry]);
-  }
   const offline = await kept();
   const list = byId('shelf-list');
   list.replaceChildren(
-    ...[...groups.values()].map((files) => {
-      const entry = preferred(files);
+    ...shelfGroups(entries, language()).map(({ shown: entry, others }) => {
       const box = h('input', { type: 'checkbox', checked: offline.has(entry.file) });
       box.addEventListener('change', async () => {
         box.disabled = true;
@@ -121,7 +93,6 @@ export async function renderShelf(): Promise<void> {
         box.disabled = false;
       });
       const meta = entry.items ? `${entry.span} · ${tn('start', '{count} item', '{count} items', entry.items)}` : tn('shelf', '{count} picture', '{count} pictures', entry.images);
-      const others = files.filter((f) => f !== entry);
       return h(
         'div',
         { class: 'cover', 'data-file': entry.file },
@@ -140,7 +111,7 @@ export async function renderShelf(): Promise<void> {
               ...others.flatMap((f) => [' ', h('button', { class: 'link-button', type: 'button', lang: f.lang, 'data-file': f.file, onclick: () => void open(f) }, languageName(f.lang))]),
             )
           : null,
-        h('label', { class: 'cover-check' }, box, h('span', {}, t('shelf', 'Keep offline')), h('span', { class: 'cover-size' }, mb(entry.size))),
+        h('label', { class: 'cover-check' }, box, h('span', {}, t('shelf', 'Keep offline')), h('span', { class: 'cover-size' }, sizeText(entry.size))),
       );
     }),
   );

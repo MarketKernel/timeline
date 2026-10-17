@@ -47,8 +47,15 @@ for (let i = 1; i < snapshots.length; i++) {
   check(`redo to step ${i}`, exact(doc) === snapshots[i], true);
 }
 check('deleted items come back in their places', (history.undo(), doc.items.map((i) => i.id)), ['a', 'c', 'd']);
+const heard = [];
+const stop = history.onChange((edited) => heard.push(edited));
 history.markSaved();
 check('saved', history.dirty, false);
+history.markDirty();
+stop();
+// A save leaves the document as it was: the strip and the open panel are not redrawn for it.
+check('a save is heard as no edit, a restored draft as one', heard, [false, true]);
+history.markSaved();
 history.undo();
 check('undo past a save is dirty', history.dirty, true);
 history.redo();

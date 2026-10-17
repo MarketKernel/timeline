@@ -182,8 +182,8 @@ export async function openZip(source: Source): Promise<ZipArchive> {
 
 /**
  * A folder that wraps everything: a .timeline unzipped in Finder and zipped
- * again comes back as `bible/timeline.json`, `bible/images/…`. Returns that
- * folder's prefix (`bible/`), or '' when the file is at the top.
+ * again comes back as `moon/timeline.json`, `moon/images/…`. Returns that
+ * folder's prefix (`moon/`), or '' when the file is at the top.
  */
 export function rootPrefix(names: readonly string[], file = 'timeline.json'): string {
   if (names.includes(file)) return '';
@@ -200,8 +200,8 @@ async function through(data: Uint8Array, transform: GenericTransformStream): Pro
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export const inflate = (data: Uint8Array): Promise<Uint8Array> => through(data, new DecompressionStream('deflate-raw'));
-export const deflate = (data: Uint8Array): Promise<Uint8Array> => through(data, new CompressionStream('deflate-raw'));
+const inflate = (data: Uint8Array): Promise<Uint8Array> => through(data, new DecompressionStream('deflate-raw'));
+const deflate = (data: Uint8Array): Promise<Uint8Array> => through(data, new CompressionStream('deflate-raw'));
 
 /* ------------------------------------------------------------------ *
  * Writing

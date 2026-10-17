@@ -1,8 +1,9 @@
 /** The .timeline container: lazy reading, streamed writing, tolerance (Task §3, §11). */
+import { createHash } from 'node:crypto';
 import { deflateRawSync, crc32 as nodeCrc } from 'node:zlib';
 import { checker, load } from '../tools/load.mjs';
 
-const { openZip, bytesSource, ZipWriter, memorySink, localHeader, centralHeader, endRecord, rootPrefix, crc32 } = await load('core/zip', 'core/hash');
+const { openZip, bytesSource, ZipWriter, memorySink, localHeader, centralHeader, endRecord, rootPrefix, crc32, contentHash, shortId } = await load('core/zip', 'core/hash');
 const { check, done } = checker();
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -23,7 +24,21 @@ const watched = (bytes) => {
   return { reads, source: { size: src.size, read: (o, l) => (reads.push([o, l]), src.read(o, l)) } };
 };
 
-check('crc32 matches zlib', crc32(enc.encode('The Bible')), nodeCrc(enc.encode('The Bible')));
+check('crc32 matches zlib', crc32(enc.encode('The Moon')), nodeCrc(enc.encode('The Moon')));
+{
+  // Eight bytes at a step, and the bytes left over: every length up to a few steps, and a running checksum.
+  const bytes = Uint8Array.from({ length: 70 }, (_, i) => (i * 113) % 256);
+  check('crc32 at every length', Array.from({ length: 71 }, (_, n) => crc32(bytes.subarray(0, n)) === nodeCrc(bytes.subarray(0, n))).every(Boolean), true);
+  check('crc32 continued', crc32(bytes.subarray(13), crc32(bytes.subarray(0, 13))), nodeCrc(bytes));
+}
+check('an image is named by the first 16 hex digits of its SHA-256', await contentHash(enc.encode('The Moon')), createHash('sha256').update('The Moon').digest('hex').slice(0, 16));
+{
+  const id = shortId('e', new Set());
+  check('a new id: the prefix, then four letters or digits', /^e_[0-9a-z]{4}$/.test(id), true);
+  // Every four-character id taken: the next is longer, never a duplicate.
+  const taken = { has: (x) => x.length < 7 };
+  check('…longer when the short ones are taken', shortId('e', taken).length, 7);
+}
 
 const json = enc.encode(JSON.stringify({ format: 'timeline', title: 'Test', filler: 'x'.repeat(5000) }));
 const image = Uint8Array.from({ length: 30000 }, (_, i) => (i * 7919) % 251);
@@ -122,12 +137,13 @@ const first = await write([
 
 {
   // What Finder makes: a wrapping folder, data descriptors (sizes after the data), __MACOSX junk.
+  /** @type {[string, Uint8Array][]} */
   const files = [
-    ['bible/', new Uint8Array(0)],
-    ['bible/timeline.json', json],
-    ['bible/images/aa11.webp', image],
-    ['__MACOSX/bible/._timeline.json', enc.encode('junk')],
-    ['bible/.DS_Store', enc.encode('junk')],
+    ['moon/', new Uint8Array(0)],
+    ['moon/timeline.json', json],
+    ['moon/images/aa11.webp', image],
+    ['__MACOSX/moon/._timeline.json', enc.encode('junk')],
+    ['moon/.DS_Store', enc.encode('junk')],
   ];
   const local = [];
   const central = [];
@@ -173,9 +189,9 @@ const first = await write([
   end.writeUInt32LE(offset, 16);
   const finder = new Uint8Array(Buffer.concat([...local, dir, end]));
   const zip = await openZip(bytesSource(finder));
-  check('Finder junk is ignored', zip.entries.map((e) => e.name), ['bible/timeline.json', 'bible/images/aa11.webp']);
+  check('Finder junk is ignored', zip.entries.map((e) => e.name), ['moon/timeline.json', 'moon/images/aa11.webp']);
   const prefix = rootPrefix(zip.entries.map((e) => e.name));
-  check('the wrapping folder is found', prefix, 'bible/');
+  check('the wrapping folder is found', prefix, 'moon/');
   check('a Finder zip reads', same(await zip.read(zip.get(`${prefix}images/aa11.webp`)), image), true);
 }
 

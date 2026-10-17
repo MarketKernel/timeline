@@ -34,11 +34,14 @@ export async function sampleTimeline(overrides = {}, entries = {}) {
  * chronology in English only, a cover, and index.json.
  */
 export async function sampleLibrary(dir) {
-  const { meta, items } = JSON.parse(await readFile(join(root, 'tests', 'fixtures', 'sample.json'), 'utf8'));
+  const { meta, items, images } = JSON.parse(await readFile(join(root, 'tests', 'fixtures', 'sample.json'), 'utf8'));
+  // The counts index.json gives are the files' own: tools/check.mjs holds the library to them.
+  const pictures = Object.keys(images).length;
+  const big = { events: 60, images: 6 };
   const files = [
-    { group: 'flight', lang: 'en', title: 'A short history of flight', span: '1783 – now', bytes: await sampleTimeline(), items: items.length, cover: 'covers/flight-sample.svg' },
-    { group: 'flight', lang: 'ru', title: 'Краткая история полёта', span: '1783 – сейчас', bytes: await sampleTimeline({ lang: 'ru', title: 'Краткая история полёта', meta: { ...meta, id: 'flight-sample-ru' } }), items: items.length, cover: 'covers/flight-sample.svg' },
-    { group: 'big', lang: 'en', title: 'A thousand events', span: '1000 BC – AD 2000', bytes: await bigTimeline(60, 6), items: 60, cover: null },
+    { group: 'flight', lang: 'en', title: 'A short history of flight', span: '1783 – now', bytes: await sampleTimeline(), items: items.length, images: pictures, cover: 'covers/flight-sample.svg' },
+    { group: 'flight', lang: 'ru', title: 'Краткая история полёта', span: '1783 – сейчас', bytes: await sampleTimeline({ lang: 'ru', title: 'Краткая история полёта', meta: { ...meta, id: 'flight-sample-ru' } }), items: items.length, images: pictures, cover: 'covers/flight-sample.svg' },
+    { group: 'big', lang: 'en', title: 'A thousand events', span: '1000 BC – AD 2000', bytes: await bigTimeline(big.events, big.images), items: big.events, images: big.images, cover: null },
   ];
   await mkdir(join(dir, 'covers'), { recursive: true });
   await writeFile(join(dir, 'covers', 'flight-sample.svg'), picture(220, 'Apollo').replace('<svg ', '<svg width="1280" height="853" '));
@@ -46,7 +49,7 @@ export async function sampleLibrary(dir) {
   for (const { bytes, ...entry } of files) {
     const file = `${entry.group}.${entry.lang}.timeline`;
     await writeFile(join(dir, file), bytes);
-    entries.push({ id: `${entry.group}-${entry.lang}`, file, description: '', kind: 'history', images: 0, size: bytes.length, ...entry });
+    entries.push({ id: `${entry.group}-${entry.lang}`, file, description: '', kind: 'history', size: bytes.length, ...entry });
   }
   await writeFile(join(dir, 'index.json'), JSON.stringify({ format: 'timeline-library', version: 1, files: entries }));
 }

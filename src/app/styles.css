@@ -5,7 +5,7 @@
  * sets data-theme on <html>; before it runs, the system's choice is followed.
  *
  * A file may ask for paper of another colour, another texture, or sans titles
- * (style in timeline.json): properties.ts then sets the paper tones, --serif
+ * (style in timeline.json): look.ts then sets the paper tones, --serif
  * and data-texture on :root itself, for the light or the dark theme.
  *
  * An item's colour arrives per element as --cat. Light: used as they are for
@@ -35,6 +35,12 @@
   --serif: var(--book);
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Over pictures, in either theme: the dark veil behind a control or a caption, the full-screen dark, and the light text on them. */
+  --scrim: 20 14 8;
+  --on-scrim: #fff;
+  --lightbox: 14 10 7;
+  --on-lightbox: #f3eadb;
 
   --toolbar: 48px;
   --safe-left: env(safe-area-inset-left, 0px);
@@ -74,6 +80,9 @@
     --rule-strong: #6a5c4d;
     --accent: #d9a660;
     --focus: #eee4d3;
+    --danger: #e07a6e;
+    --today: #e8806b;
+    --shadow: 0 8px 28px rgb(0 0 0 / 0.5);
     --lift: 30%;
     color-scheme: dark;
   }
@@ -102,7 +111,7 @@ body {
 
 /*
  * The paper's texture (style.texture, set as data-texture on :root by
- * properties.ts): grain by default; plain; a school notebook's squares or
+ * look.ts): grain by default; plain; a school notebook's squares or
  * lines; dots; graph paper. Drawn in the paper's own rule tone, so they follow
  * its colour and the theme; the settings show each on a tile.
  */
@@ -175,15 +184,6 @@ svg {
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 /* ---------- Buttons ---------- */
@@ -498,6 +498,28 @@ svg {
   color: var(--ink-faint);
 }
 
+/* Where the project lives: on the start screen's last line and in About. */
+.home-link {
+  color: var(--accent);
+}
+
+/* About: the icon, what the page is, its version and its home. */
+.about {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  color: var(--ink-soft);
+}
+
+.about p {
+  margin: 0;
+}
+
+.about-version {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
 body.dropping::after {
   content: '';
   position: fixed;
@@ -686,6 +708,15 @@ body.dropping::after {
   overflow: hidden;
 }
 
+/* Everything that wears an item's colour shows it lifted in the dark (see the top of this file). */
+.card,
+.dot,
+.era,
+.bar,
+.details-mark {
+  --cat-shown: color-mix(in oklab, var(--cat), white var(--lift));
+}
+
 /*
  * A card: hairline border, a pointer to its dot, no shadow; the selected one gets the ink ring.
  * Cards may lie over each other: --z (view.ts) puts a later event over an earlier one, and the
@@ -705,7 +736,6 @@ body.dropping::after {
   text-align: left;
   overflow: hidden;
   cursor: pointer;
-  --cat-shown: color-mix(in oklab, var(--cat), white var(--lift));
 }
 
 .card:hover {
@@ -775,8 +805,8 @@ body.dropping::after {
   height: calc(50% - 1px);
   display: grid;
   place-items: center;
-  background: rgb(20 14 8 / 0.5);
-  color: #fff;
+  background: rgb(var(--scrim) / 0.5);
+  color: var(--on-scrim);
   font: 600 15px/1 var(--sans);
   letter-spacing: 0.02em;
 }
@@ -790,8 +820,8 @@ body.dropping::after {
   gap: 3px;
   padding: 2px 6px 2px 4px;
   border-radius: 999px;
-  background: rgb(20 14 8 / 0.6);
-  color: #fff;
+  background: rgb(var(--scrim) / 0.6);
+  color: var(--on-scrim);
   font: 600 11px/14px var(--sans);
   backdrop-filter: blur(4px);
 }
@@ -1006,6 +1036,8 @@ body.resizing .card-resize {
   width: 1px;
   margin-left: -0.5px;
   background: var(--rule-strong);
+  /* A card moved by hand: the pointer leans from its dot towards it (view.ts). */
+  transform-origin: bottom center;
 }
 
 .planned {
@@ -1048,7 +1080,6 @@ body.resizing .card-resize {
   border: 0;
   background: transparent;
   cursor: pointer;
-  --cat-shown: color-mix(in oklab, var(--cat), white var(--lift));
 }
 
 .dot::after {
@@ -1115,14 +1146,14 @@ body.resizing .card-resize {
   padding: 0;
   border: 0;
   border-right: 1px solid var(--paper);
-  background: color-mix(in oklab, color-mix(in oklab, var(--cat), white var(--lift)) 34%, var(--paper));
+  background: color-mix(in oklab, var(--cat-shown) 34%, var(--paper));
   cursor: pointer;
   overflow: hidden;
   text-align: left;
 }
 
 .era--open {
-  background: linear-gradient(90deg, color-mix(in oklab, color-mix(in oklab, var(--cat), white var(--lift)) 34%, var(--paper)) calc(100% - 64px), color-mix(in oklab, color-mix(in oklab, var(--cat), white var(--lift)) 10%, var(--paper)));
+  background: linear-gradient(90deg, color-mix(in oklab, var(--cat-shown) 34%, var(--paper)) calc(100% - 64px), color-mix(in oklab, var(--cat-shown) 10%, var(--paper)));
 }
 
 .era-label {
@@ -1163,9 +1194,9 @@ body.resizing .card-resize {
   height: 16px;
   padding: 0;
   border: 0;
-  border-left: 3px solid color-mix(in oklab, var(--cat), white var(--lift));
+  border-left: 3px solid var(--cat-shown);
   border-radius: 2px 8px 8px 2px;
-  background: color-mix(in oklab, color-mix(in oklab, var(--cat), white var(--lift)) 30%, var(--paper-raised));
+  background: color-mix(in oklab, var(--cat-shown) 30%, var(--paper-raised));
   cursor: pointer;
   text-align: left;
   overflow: visible;
@@ -1177,7 +1208,7 @@ body.resizing .card-resize {
 
 .bar--open {
   border-radius: 2px 0 0 2px;
-  background: linear-gradient(90deg, color-mix(in oklab, color-mix(in oklab, var(--cat), white var(--lift)) 30%, var(--paper-raised)) calc(100% - 48px), transparent);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--cat-shown) 30%, var(--paper-raised)) calc(100% - 48px), transparent);
 }
 
 .bar-label {
@@ -1629,8 +1660,8 @@ body.editing .details {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgb(20 14 8 / 0.45);
-  color: #fff;
+  background: rgb(var(--scrim) / 0.45);
+  color: var(--on-scrim);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
@@ -1679,7 +1710,7 @@ body.editing .details {
 
 .gallery-arrow:hover,
 .gallery-zoom:hover {
-  background: rgb(20 14 8 / 0.7);
+  background: rgb(var(--scrim) / 0.7);
 }
 
 @media (pointer: coarse) {
@@ -1695,8 +1726,8 @@ body.editing .details {
   bottom: 10px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgb(20 14 8 / 0.55);
-  color: #fff;
+  background: rgb(var(--scrim) / 0.55);
+  color: var(--on-scrim);
   font: 600 11px/16px var(--sans);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -1755,13 +1786,13 @@ body.editing .details {
   margin: 0;
   padding: 0;
   border: 0;
-  background: rgb(14 10 7 / 0.94);
-  color: #f3eadb;
+  background: rgb(var(--lightbox) / 0.94);
+  color: var(--on-lightbox);
   overflow: hidden;
 }
 
 .lightbox::backdrop {
-  background: rgb(14 10 7 / 0.6);
+  background: rgb(var(--lightbox) / 0.6);
 }
 
 .lightbox[open] {
@@ -1884,7 +1915,7 @@ body.editing .details {
 }
 
 .lightbox-caption .details-caption {
-  color: #f3eadb;
+  color: var(--on-lightbox);
   font-family: var(--serif);
   font-size: 16px;
 }
@@ -1930,7 +1961,7 @@ body.editing .details {
 
 .lightbox-thumb[aria-current='true'] {
   opacity: 1;
-  box-shadow: 0 0 0 2px #f3eadb;
+  box-shadow: 0 0 0 2px var(--on-lightbox);
 }
 
 @media (max-width: 720px) {
@@ -1980,7 +2011,7 @@ body.editing .details {
   height: 10px;
   flex: none;
   border-radius: 50%;
-  background: color-mix(in oklab, var(--cat), white var(--lift));
+  background: var(--cat-shown);
 }
 
 .details-title {
@@ -2364,24 +2395,16 @@ body.placing .strip * {
   background: color-mix(in oklab, var(--accent) 45%, var(--paper-raised));
 }
 
-.place-range--era .place-bar {
-  height: 26px;
-  border-left: 0;
-  border-radius: 0;
-}
-
 body.drawing .place-guide {
   display: none;
 }
 
+/* In edit mode cards move anywhere and bars up or down, their dates staying; only an era's edges are dragged sideways. */
 body.editing .card,
-body.editing .dot,
 body.editing .bar {
   cursor: grab;
 }
 
-body.editing .bar::before,
-body.editing .bar::after,
 body.editing .era::before,
 body.editing .era::after {
   content: '';
@@ -2392,12 +2415,10 @@ body.editing .era::after {
   cursor: ew-resize;
 }
 
-body.editing .bar::before,
 body.editing .era::before {
   left: -3px;
 }
 
-body.editing .bar::after,
 body.editing .era::after {
   right: -3px;
 }
@@ -2534,13 +2555,6 @@ body.dragging .bar {
 
 .inline-check input {
   accent-color: var(--ink);
-}
-
-.editor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 12px;
-  align-items: start;
 }
 
 /* The colour: none (the warm grey, struck through), the palette, and any other through the system picker. */
@@ -2978,16 +2992,29 @@ body.dragging .bar {
   gap: 12px;
 }
 
-.field-input--short {
-  width: 9rem;
-}
-
 .form-pair--even {
   grid-template-columns: 1fr 1fr;
 }
 
 @media (max-width: 520px) {
   .form-pair--even {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The author in Timeline settings: the name across, the website and a contact under it. */
+.author-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.author-fields > :first-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .author-fields {
     grid-template-columns: 1fr;
   }
 }

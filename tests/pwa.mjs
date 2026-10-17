@@ -57,8 +57,8 @@ server.on('connection', (socket) => {
   sockets.add(socket);
   socket.on('close', () => sockets.delete(socket));
 });
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`;
+await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+const origin = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}`;
 const url = `${origin}/app/`;
 
 const LAUNCH = `Object.defineProperty(window, 'launchQueue', { configurable: true, value: { setConsumer(consumer) { window.__launch = consumer; } } });`;
@@ -66,11 +66,7 @@ const LAUNCH = `Object.defineProperty(window, 'launchQueue', { configurable: tru
 const chrome = await startChrome();
 const ev = (session, expression) => chrome.evaluate(session, expression);
 try {
-  const { targetId } = await chrome.send('Target.createTarget', { url: 'about:blank' });
-  const tab = await chrome.attach(targetId, 'pwa');
-  await chrome.send('Page.enable', {}, tab);
-  await chrome.send('Page.addScriptToEvaluateOnNewDocument', { source: LAUNCH }, tab);
-  await chrome.send('Page.navigate', { url }, tab);
+  const tab = await chrome.open(url, 'pwa', { script: LAUNCH });
   check('the page loads', await chrome.until(tab, "document.documentElement.dataset.ready === 'true'"), true);
   check('the worker installs', await chrome.until(tab, "navigator.serviceWorker.getRegistration().then(r => !!r?.active)", 15000), true);
   await chrome.send('Page.reload', {}, tab);

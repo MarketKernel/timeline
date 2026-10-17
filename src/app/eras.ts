@@ -17,8 +17,9 @@ import { checkEras, readEras, writeEras, type EraRow } from '../core/eras';
 import { shortId } from '../core/hash';
 import { language, t } from '../core/i18n';
 import { DEFAULT_COLOR, extentOf } from '../core/model';
-import { byId, h } from './dom';
-import { openEditor, PALETTE } from './editor';
+import { byId, h, icon } from './dom';
+import { openEditor } from './editor';
+import { PALETTE } from './forms';
 import { app, on } from './state';
 import { dialog } from './ui';
 
@@ -28,18 +29,11 @@ interface Row {
   text: string;
 }
 
-const icon = (paths: string) => {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = paths;
-  return svg;
-};
-const PENCIL = '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>';
-const PLUS = '<path d="M12 5v14M5 12h14"/>';
-const CROSS = '<path d="M6 6l12 12M18 6L6 18"/>';
+const PENCIL = ['M4 20h4L19 9l-4-4L4 16z', 'M13.5 6.5l4 4'];
+const PLUS = ['M12 5v14M5 12h14'];
+const CROSS = ['M6 6l12 12M18 6L6 18'];
 
-export async function openEras(focusId?: string): Promise<void> {
+async function openEras(focusId?: string): Promise<void> {
   const session = app.session;
   if (!session) return;
   const doc = session.doc;
@@ -147,8 +141,8 @@ export async function openEras(focusId?: string): Promise<void> {
       row.text = date.value;
       refresh();
     });
-    const button = (paths: string, label: string, run: () => void, extra = '') =>
-      h('button', { class: `icon-button era-action${extra}`, type: 'button', title: label, 'aria-label': label, onclick: run }, icon(paths));
+    const button = (paths: string[], label: string, run: () => void, extra = '') =>
+      h('button', { class: `icon-button era-action${extra}`, type: 'button', title: label, 'aria-label': label, onclick: run }, icon(...paths));
     return h(
       'li',
       { class: 'era-row', 'data-id': row.era.id ?? '' },
@@ -229,7 +223,7 @@ export async function openEras(focusId?: string): Promise<void> {
     h('p', { class: 'field-hint' }, t('eras', 'Eras follow one another: each begins where the one above it ends, so they never overlap. A row without a name is a gap.')),
     empty,
     listEl,
-    h('button', { class: 'text-button era-add', type: 'button', onclick: append }, icon(PLUS), t('eras', 'Add an era at the end')),
+    h('button', { class: 'text-button era-add', type: 'button', onclick: append }, icon(...PLUS), t('eras', 'Add an era at the end')),
     endField,
     palette,
     error,

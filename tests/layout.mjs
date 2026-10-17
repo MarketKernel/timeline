@@ -102,4 +102,16 @@ check('…standing inside the strip', outside, 0);
   check('a round card is centred over its dot', [placed.get('round').left, placed.get('rect').left], [240, 588]);
 }
 
+{
+  // A card moved by hand stands that far from its usual place; its slanted pointer keeps the rows it crosses for itself.
+  const card = (id, x, more = {}) => ({ id, x, rank: 1, order: x, full: { width: 180, rows: 2 }, ...more });
+  const moved = layoutCards([card('a', 500, { lane: 3, shift: -200 })], { rows: 10, inset: 12 });
+  check('a card moved by hand stands where it was put', [moved.get('a').left, moved.get('a').row], [500 - 12 - 200, 3]);
+  // The pointer of 'a' leans from x 500 at the axis to x 300 at row 3 (near 467 in row 0): the place right above the dot is free.
+  const beside = layoutCards([card('a', 500, { lane: 3, shift: -200 }), card('b', 495, { full: { width: 10, rows: 1 } })], { rows: 10, gap: 0, inset: 0 });
+  check('…its pointer keeps the rows along its slant, not straight above the dot', beside.get('b').row, 0);
+  const straight = layoutCards([card('a', 500, { lane: 3 }), card('b', 495, { full: { width: 10, rows: 1 } })], { rows: 10, gap: 0, inset: 0 });
+  check('…where a straight one would keep b out', straight.get('b').row !== 0, true);
+}
+
 done('layout');

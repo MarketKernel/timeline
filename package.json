@@ -1,9 +1,10 @@
 {
   "name": "timeline",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Timeline — a chronology viewer and editor in one HTML file; chronologies are .lifemap files",
+  "description": "Timeline — a chronology viewer and editor in one HTML file; chronologies are .timeline files",
   "license": "MIT",
+  "homepage": "https://github.com/MarketKernel/timeline",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -11,7 +12,7 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
     "test": "node tests/run.mjs",
     "test:browser": "node tests/app.mjs && node tests/pwa.mjs",
     "check": "npm run typecheck && npm test && npm run build && npm run test:browser",
@@ -20,6 +21,7 @@
     "icons": "node tools/icons.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "esbuild": "^0.25.12",
     "typescript": "^5.9.3"
   }

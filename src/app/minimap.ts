@@ -5,9 +5,11 @@
  */
 
 import { endDay, midOf, startOf } from '../core/dates';
+import { t } from '../core/i18n';
 import { colorOf, rankOf, type Doc } from '../core/model';
 import { clamp } from '../core/scale';
 import { h } from './dom';
+import { on } from './state';
 import type { Strip } from './view';
 
 export class Minimap {
@@ -15,35 +17,52 @@ export class Minimap {
   private readonly frame: HTMLElement;
   private range: [number, number] = [0, 1];
   private dirty = true;
+  private frameRequest = 0;
+  /** The root's width, kept from the resize observer: read on every pan frame, it would force a layout. */
+  private width = 0;
 
   constructor(
     readonly root: HTMLElement,
     private readonly strip: Strip,
   ) {
     this.canvas = h('canvas', { class: 'minimap-canvas', 'aria-hidden': 'true' });
-    this.frame = h('div', { class: 'minimap-frame', role: 'slider', tabindex: '-1', 'aria-label': 'Visible range' });
+    const label = () => t('minimap', 'Visible range');
+    this.frame = h('div', { class: 'minimap-frame', role: 'slider', tabindex: '-1', 'aria-label': label() });
+    on('language', () => this.frame.setAttribute('aria-label', label()));
     root.replaceChildren(this.canvas, this.frame);
     new ResizeObserver(() => {
+      this.width = root.clientWidth;
       this.dirty = true;
       this.update();
     }).observe(root);
+    // An edit, an undo, a restored draft: the picture is redrawn once, whatever else asked for it in the same frame.
+    on('changed', () => this.invalidate());
     this.listen();
   }
 
-  /** The document changed: redraw the picture. */
+  /** The document or its look changed: the picture is redrawn at the next frame. */
   invalidate(): void {
     this.dirty = true;
-    this.update();
+    if (this.frameRequest) return;
+    this.frameRequest = requestAnimationFrame(() => {
+      this.frameRequest = 0;
+      this.update();
+    });
+  }
+
+  private get span(): number {
+    if (!this.width) this.width = this.root.clientWidth;
+    return this.width;
   }
 
   private toX(day: number): number {
     const [a, b] = this.range;
-    return ((day - a) / (b - a)) * this.root.clientWidth;
+    return ((day - a) / (b - a)) * this.span;
   }
 
   private toDay(x: number): number {
     const [a, b] = this.range;
-    return a + (x / Math.max(1, this.root.clientWidth)) * (b - a);
+    return a + (x / Math.max(1, this.span)) * (b - a);
   }
 
   /** Moves the frame; redraws the picture only when the document or the size changed. */
@@ -55,7 +74,7 @@ export class Minimap {
     const half = view.width / 2 / view.pxPerDay;
     const x0 = this.toX(view.center - half);
     const x1 = this.toX(view.center + half);
-    const width = this.root.clientWidth;
+    const width = this.span;
     const left = clamp(x0, 0, width);
     const right = clamp(x1, 0, width);
     this.frame.style.left = `${left}px`;
@@ -68,7 +87,7 @@ export class Minimap {
     const pad = (hi - lo) * 0.02;
     this.range = [lo - pad, hi + pad];
     const ratio = devicePixelRatio || 1;
-    const width = this.root.clientWidth;
+    const width = this.span;
     const height = this.root.clientHeight;
     this.canvas.width = Math.round(width * ratio);
     this.canvas.height = Math.round(height * ratio);
@@ -127,7 +146,7 @@ export class Minimap {
     this.root.addEventListener('pointermove', (event) => {
       if (!drag) return;
       const [a, b] = this.range;
-      const days = ((event.clientX - drag.x) / Math.max(1, this.root.clientWidth)) * (b - a);
+      const days = ((event.clientX - drag.x) / Math.max(1, this.span)) * (b - a);
       this.strip.setView({ ...this.strip.view, center: drag.center + days });
     });
     const end = () => {

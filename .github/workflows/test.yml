@@ -1,8 +1,21 @@
 name: test
 
 on:
+  # A push to main is tested by pages.yml, which calls this workflow before it deploys.
   push:
+    branches-ignore:
+      - main
   pull_request:
+  workflow_call:
+
+# A newer push to the same branch makes the run for the older one moot.
+# Called from pages.yml, github.workflow is the caller's: the two never share a group.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -17,19 +30,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # build.mjs fails on anything the page would fetch from elsewhere (assertSelfContained).
       - run: npm run build
 
       # ubuntu-latest ships Chrome at /usr/bin/google-chrome, where tools/chrome.mjs looks.
       # The page and the PWA (build/pages/: the worker, the manifest, offline, updates).
       - run: npm run test:browser
-
-      # The single HTML file must not pull anything off the network.
-      - name: No external references in the build
-        run: |
-          if grep -oE '(src|href)="(https?:)?//[^"]*"' build/timeline.html; then
-            echo "::error::external resources are left in build/timeline.html"
-            exit 1
-          fi
 
       - uses: actions/upload-artifact@v4
         with:

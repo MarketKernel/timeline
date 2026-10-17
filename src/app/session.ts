@@ -10,9 +10,9 @@ import { extentOf, parseDoc, serializeDoc, usedImages, type Doc, type Warning } 
 import { pxPerDayOf } from '../core/scale';
 import { blobSource, openZip, rootPrefix } from '../core/zip';
 import { byId, h } from './dom';
-import { canSaveInPlace, download, FileError, fileNameFor, timelineBlob, PICKER_TYPES, readTimeline, saveToHandle, shareFile, sizeText, type Opened } from './files';
+import { deliver, FileError, fileNameFor, pickSaveFile, PICKER_TYPES, readTimeline, saveToHandle, sizeText, timelineBlob, type Opened } from './files';
 import { ImageStore } from './images';
-import { applyStyle } from './properties';
+import { applyStyle } from './look';
 import { addRecent, dropDraft, loadDraft, permitted, saveDraft } from './recent';
 import { recall, remember } from './settings';
 import { app, emit, type Session } from './state';
@@ -22,7 +22,7 @@ export function showStart(): void {
   byId('app').hidden = true;
   byId('start').hidden = false;
   document.title = 'Timeline';
-  window.dispatchEvent(new CustomEvent('timeline:start'));
+  emit('start');
 }
 
 function showApp(): void {
@@ -78,7 +78,7 @@ export async function startSession(opened: Omit<Opened, 'file'>, handle: FileSys
   app.session = session;
   // The file's look before its first frame, not after a draft has been offered.
   applyStyle();
-  session.history.onChange(() => onDocChanged());
+  session.history.onChange((edited) => onDocChanged(edited));
   app.strip.setDoc(doc, store);
   app.strip.selected = null;
   showApp();
@@ -101,7 +101,6 @@ export async function openNew(doc: Doc): Promise<boolean> {
   if (app.session && !(await closeSession())) return false;
   await startSession({ doc, warnings: [], archive: null, prefix: '', name: fileNameFor(doc) });
   app.session!.history.markDirty();
-  updateTitle();
   return true;
 }
 
@@ -195,8 +194,6 @@ async function offerDraft(session: Session): Promise<void> {
   Object.assign(session.doc, doc);
   for (const key of Object.keys(session.doc) as (keyof Doc)[]) if (!(key in doc)) delete session.doc[key];
   session.history.markDirty();
-  app.strip.changed();
-  emit('changed');
 }
 
 /* ------------------------------------------------------------------ *
@@ -208,6 +205,9 @@ function stampModified(doc: Doc): void {
   doc.meta.generator = `timeline ${__APP_VERSION__}`;
 }
 
+/** The name a save gives the file: a shelf's copy is named by its id, a timeline.json or a .zip becomes a .timeline. */
+const savedName = (session: Session): string => (session.remote ? fileNameFor(session.doc) : session.name.replace(/\.(zip|json)$/i, '.timeline'));
+
 /** Saves into the open file when it can; otherwise asks where (or downloads). */
 export async function save(as = false): Promise<boolean> {
   const session = app.session;
@@ -216,15 +216,10 @@ export async function save(as = false): Promise<boolean> {
   try {
     stampModified(session.doc);
     let handle = as || session.remote ? null : session.handle;
-    if (!handle && canSaveInPlace()) {
-      try {
-        handle = await (window as unknown as { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
-          suggestedName: session.handle?.name ?? (session.remote ? fileNameFor(session.doc) : session.name.replace(/\.(zip|json)$/i, '.timeline')),
-          types: PICKER_TYPES,
-        });
-      } catch {
-        return false;
-      }
+    if (!handle) {
+      const picked = await pickSaveFile(session.handle?.name ?? savedName(session), PICKER_TYPES);
+      if (picked === false) return false;
+      handle = picked;
     }
     const oldDraft = draftKey(session.doc, session.name);
     // Pictures the file no longer needs are left out of it, but undo may bring their items back:
@@ -255,8 +250,7 @@ export async function save(as = false): Promise<boolean> {
     } else {
       const { blob, result: r } = await timelineBlob(session.doc, session.store, session.archive, session.prefix);
       result = r;
-      const name = session.remote ? fileNameFor(session.doc) : session.name.replace(/\.(zip|json)$/i, '.timeline');
-      if (!(/iPhone|iPad/.test(navigator.userAgent) && (await shareFile(blob, name)))) download(blob, name);
+      await deliver(blob, savedName(session));
     }
     session.history.markSaved();
     await dropDraft(oldDraft);
@@ -297,6 +291,7 @@ export async function closeSession(): Promise<boolean> {
     } else if (choice !== 'discard') return false;
   }
   // Saved, discarded or undone back to clean: no draft is left to offer next time.
+  clearTimeout(draftTimer);
   await dropDraft(draftKey(session.doc, session.name));
   rememberPosition();
   session.store.dispose();
@@ -314,12 +309,16 @@ export function rememberPosition(): void {
 }
 
 let draftTimer = 0;
-/** After every change: the title's dot, and in 30 s an autosave or a recovery draft. */
-function onDocChanged(): void {
+/**
+ * After every change: the title's dot, and in 30 s an autosave or a recovery
+ * draft. A save changes only the dot: the strip and the open panel stay as they are.
+ */
+function onDocChanged(edited: boolean): void {
   updateTitle();
-  app.strip.changed();
-  app.minimap.invalidate();
-  emit('changed');
+  if (edited) {
+    app.strip.changed();
+    emit('changed');
+  }
   clearTimeout(draftTimer);
   const session = app.session;
   if (!session) return;

@@ -54,17 +54,23 @@ export function oklchToHex([L, C, H]: Lch): string {
     c = lo;
   }
   return `#${linearRgb([L, c, H])
-    .map((v) => Math.round(Math.min(1, Math.max(0, fromLinear(Math.min(1, Math.max(0, v))))) * 255).toString(16).padStart(2, '0'))
+    // Clamped before the transfer curve, which keeps [0, 1] within [0, 1].
+    .map((v) => Math.round(fromLinear(Math.min(1, Math.max(0, v))) * 255).toString(16).padStart(2, '0'))
     .join('')}`;
 }
 
 export type PaperTone = 'paper' | 'paper-raised' | 'paper-sunk' | 'rule' | 'rule-strong';
 
-/** The stock tones, as styles.css has them: parchment, and deep brown-black paper. */
-const STOCK: Record<'light' | 'dark', Record<PaperTone, string>> = {
+/** The stock tones, as styles.css has them (tests/style.mjs holds them to it): parchment, and deep brown-black paper. */
+export const STOCK: Record<'light' | 'dark', Record<PaperTone, string>> = {
   light: { paper: '#f6efe1', 'paper-raised': '#fffaf0', 'paper-sunk': '#efe5d2', rule: '#d9cdb8', 'rule-strong': '#b9aa90' },
   dark: { paper: '#1d1814', 'paper-raised': '#28211b', 'paper-sunk': '#16120f', rule: '#463b31', 'rule-strong': '#6a5c4d' },
 };
+
+/** The stock tones in OKLCH, worked out once: every paper is made from them. */
+const STOCK_OKLCH = Object.fromEntries(
+  Object.entries(STOCK).map(([theme, tones]) => [theme, Object.fromEntries(Object.entries(tones).map(([tone, hex]) => [tone, hexToOklch(hex)]))]),
+) as Record<'light' | 'dark', Record<PaperTone, Lch>>;
 
 /** The parchment: a file whose paper is this looks like a file without one. */
 export const STOCK_PAPER = STOCK.light.paper;
@@ -77,16 +83,16 @@ const MAX_RULE_CHROMA = 0.09;
 
 /** The five paper tones for a paper colour, in the light or the dark theme. */
 export function paperTones(color: string, dark: boolean): Record<PaperTone, string> {
-  const stock = STOCK[dark ? 'dark' : 'light'];
-  const [l0, c0] = hexToOklch(stock.paper);
+  const stock = STOCK_OKLCH[dark ? 'dark' : 'light'];
+  const [l0, c0] = stock.paper;
+  const [parchmentL, parchmentC] = STOCK_OKLCH.light.paper;
   const [l, c, h] = hexToOklch(color);
   const lightL = Math.min(LIGHT_RANGE[1], Math.max(LIGHT_RANGE[0], l));
   // The dark paper moves a little with the light one, so white and cream stay apart in the dark.
-  const paperL = dark ? l0 + (lightL - hexToOklch(STOCK.light.paper)[0]) * 0.25 : lightL;
-  const paperC = Math.min(c, MAX_CHROMA) * (dark ? c0 / hexToOklch(STOCK.light.paper)[1] : 1);
+  const paperL = dark ? l0 + (lightL - parchmentL) * 0.25 : lightL;
+  const paperC = Math.min(c, MAX_CHROMA) * (dark ? c0 / parchmentC : 1);
   const out = {} as Record<PaperTone, string>;
-  for (const [tone, hex] of Object.entries(stock) as [PaperTone, string][]) {
-    const [tl, tc] = hexToOklch(hex);
+  for (const [tone, [tl, tc]] of Object.entries(stock) as [PaperTone, Lch][]) {
     out[tone] = oklchToHex([Math.min(1, Math.max(0, paperL + tl - l0)), Math.min(MAX_RULE_CHROMA, c0 > 0 ? (paperC * tc) / c0 : paperC), h]);
   }
   return out;

@@ -9,9 +9,9 @@ import { t, tn } from './i18n';
 
 export type Unit = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'season' | 'year' | 'decade' | 'century' | 'millennium';
 
-export const UNITS: readonly Unit[] = ['minute', 'hour', 'day', 'week', 'month', 'season', 'year', 'decade', 'century', 'millennium'];
+const UNITS: readonly Unit[] = ['minute', 'hour', 'day', 'week', 'month', 'season', 'year', 'decade', 'century', 'millennium'];
 
-export const UNIT_DAYS: Readonly<Record<Unit, number>> = {
+const UNIT_DAYS: Readonly<Record<Unit, number>> = {
   minute: 1 / 1440,
   hour: 1 / 24,
   day: 1,
@@ -75,7 +75,7 @@ const PRESET_MIN_PX = 100;
 export const presetsFor = (extentDays: number): ScaleSpec[] => PRESETS.filter((spec) => pxPerDayOf(spec) * Math.max(extentDays, 1) >= PRESET_MIN_PX);
 
 /** The unit's name with a number: "1 year", "3 centuries". */
-export function unitText(unit: Unit, count: number): string {
+function unitText(unit: Unit, count: number): string {
   switch (unit) {
     case 'minute':
       return tn('scale', '{count} minute', '{count} minutes', count);
@@ -145,14 +145,13 @@ export function nearestPreset(pxPerDay: number): ScaleSpec {
 
 /** The next preset in the direction of `direction` (+1 finer, -1 coarser) from pxPerDay. */
 export function stepPreset(pxPerDay: number, direction: 1 | -1): ScaleSpec | null {
-  const sorted = PRESETS.map(pxPerDayOf);
   const eps = 1.02;
+  // PRESETS run from the finest to the coarsest: the next finer is the last one finer than this, the next coarser the first one coarser.
   if (direction > 0) {
-    const finer = sorted.filter((p) => p > pxPerDay * eps).sort((a, b) => a - b)[0];
-    return finer === undefined ? null : PRESETS[sorted.indexOf(finer)]!;
+    for (let i = PRESETS.length - 1; i >= 0; i--) if (pxPerDayOf(PRESETS[i]!) > pxPerDay * eps) return PRESETS[i]!;
+    return null;
   }
-  const coarser = sorted.filter((p) => p < pxPerDay / eps).sort((a, b) => b - a)[0];
-  return coarser === undefined ? null : PRESETS[sorted.indexOf(coarser)]!;
+  return PRESETS.find((spec) => pxPerDayOf(spec) < pxPerDay / eps) ?? null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -200,9 +199,6 @@ export const xOf = (view: View, day: number): number => (day - view.center) * vi
 
 export const dayAt = (view: View, x: number): number => view.center + (x - view.width / 2) / view.pxPerDay;
 
-/** The first and last day on screen. */
-export const visibleRange = (view: View): [number, number] => [dayAt(view, 0), dayAt(view, view.width)];
-
 /**
  * From the whole extent in 600 px — or further, to the coarsest preset that
  * still gives it 100 px (two centuries of flight at 1 px = 1 year) — to
@@ -224,7 +220,6 @@ export function zoomAt(view: View, factor: number, x: number, limits: { min: num
   return { ...view, pxPerDay, center: anchor - (x - view.width / 2) / pxPerDay };
 }
 
-/** The view that shows [start, end] with `margin` px free on each side. */
 /**
  * The view that shows [start, end] with `margin` px free on each side — or,
  * given [before, after], that much before the start and after the end, the

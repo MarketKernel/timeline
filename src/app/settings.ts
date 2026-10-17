@@ -5,6 +5,7 @@
 
 import { isLanguage, LANGUAGES, t, type Language } from '../core/i18n';
 import { h } from './dom';
+import { field } from './forms';
 import { dialog } from './ui';
 
 export interface Settings {
@@ -21,7 +22,7 @@ export interface Settings {
   music: boolean;
 }
 
-export const DEFAULTS: Readonly<Settings> = {
+const DEFAULTS: Readonly<Settings> = {
   language: 'system',
   theme: 'system',
   autosave: true,
@@ -105,7 +106,7 @@ export async function settingsSheet({ settings, change, extra, readOnly = false 
   const select = <K extends 'language' | 'theme'>(key: K, label: string, options: [Settings[K], string][]) => {
     const el = h('select', { class: 'field-input', id: `setting-${key}` }, ...options.map(([value, text]) => h('option', { value: String(value), selected: settings[key] === value }, text)));
     el.addEventListener('change', () => change({ [key]: el.value } as Partial<Settings>));
-    return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), el);
+    return field(label, el);
   };
   const toggle = (key: 'autosave' | 'showMinor' | 'secondRuler' | 'reduceMotion' | 'music', label: string, hint: string) => {
     const box = h('input', { type: 'checkbox', id: `setting-${key}`, checked: settings[key] });
@@ -126,7 +127,7 @@ export async function settingsSheet({ settings, change, extra, readOnly = false 
     ]),
     readOnly ? null : toggle('autosave', t('settings', 'Save automatically'), t('settings', 'Every 30 seconds into the open file, when the browser allows it; otherwise a recovery copy is kept.')),
     toggle('showMinor', t('settings', 'Show small events'), t('settings', 'Events with small cards — the footnotes — when zoomed in.')),
-    toggle('secondRuler', t('settings', 'Show the second ruler'), t('settings', 'Years from the file’s anchor: Anno Mundi, an age.')),
+    toggle('secondRuler', t('settings', 'Show the second ruler'), t('settings', 'Years from the file’s anchor: since a founding, a first flight, a birth.')),
     toggle('reduceMotion', t('settings', 'Reduce motion'), t('settings', 'Jump instead of gliding; no inertia.')),
     toggle('music', t('settings', 'Play background music'), t('settings', 'When a timeline has music of its own. The speaker in the toolbar turns it off and on too.')),
     extra?.() ?? null,

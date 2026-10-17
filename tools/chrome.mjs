@@ -32,7 +32,7 @@ export async function startChrome(extraFlags = []) {
   if (process.platform === 'linux') flags.push('--no-sandbox');
   const chrome = spawn(CHROME, [...flags, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] });
   chrome.stderr.on('data', () => undefined);
-  const [, , , input, output] = chrome.stdio;
+  const [, , , input, output] = /** @type {[unknown, unknown, unknown, import('node:stream').Writable, import('node:stream').Readable]} */ (chrome.stdio);
 
   let lastId = 0;
   const waiting = new Map();
@@ -119,13 +119,29 @@ export async function startChrome(extraFlags = []) {
     await sleep(80);
   }
 
-  /** Opens a new tab at `url`, attached and ready for evaluate(). */
-  async function open(url, name = url) {
+  /**
+   * Opens a new tab at `url`, attached and ready for evaluate(). `script` runs
+   * in every document the tab loads, before the page's own; `setup` gets the
+   * tab before it navigates (a viewport, an emulated theme).
+   * @param {string} url
+   * @param {string} [name]
+   * @param {{ script?: string, setup?: (session: string) => Promise<void> }} [options]
+   */
+  async function open(url, name = url, { script, setup } = {}) {
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const session = await attach(targetId, name);
     await send('Page.enable', {}, session);
-    await send('Page.navigate', { url }, session);
+    if (setup) await setup(session);
+    if (script) await send('Page.addScriptToEvaluateOnNewDocument', { source: script }, session);
+    if (url !== 'about:blank') await send('Page.navigate', { url }, session);
     return session;
+  }
+
+  /** Puts files into an <input type=file>, as a person picking them would. */
+  async function setFiles(sessionId, selector, files) {
+    const { root } = await send('DOM.getDocument', {}, sessionId);
+    const { nodeId } = await send('DOM.querySelector', { nodeId: root.nodeId, selector }, sessionId);
+    await send('DOM.setFileInputFiles', { nodeId, files }, sessionId);
   }
 
   /** Emulates a viewport: { width, height, mobile, scale }. */
@@ -146,5 +162,5 @@ export async function startChrome(extraFlags = []) {
     await rm(profile, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  return { send, attach, open, evaluate, until, targets, waitForTarget, click, viewport, screenshot, close, errors, listeners };
+  return { send, attach, open, setFiles, evaluate, until, targets, waitForTarget, click, viewport, screenshot, close, errors, listeners };
 }

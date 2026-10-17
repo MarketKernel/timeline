@@ -10,9 +10,10 @@
  * otherwise a download (and on iOS the share sheet, "Save to Files").
  */
 
+import { readArchive, readDoc, ReadError, type ReadErrorCode } from '../core/archive';
 import { t } from '../core/i18n';
-import { missingImages, parseDoc, serializeDoc, usedImages, type Doc, type Warning } from '../core/model';
-import { blobSource, isJunk, openZip, rootPrefix, ZipError, ZipWriter, type Sink, type ZipArchive } from '../core/zip';
+import { serializeDoc, usedImages, type Doc, type Warning } from '../core/model';
+import { blobSource, isJunk, ZipWriter, type Sink, type ZipArchive } from '../core/zip';
 import { ImageStore, type MediaFolder } from './images';
 
 export interface Opened {
@@ -35,62 +36,34 @@ export class FileError extends Error {
 
 const encoder = new TextEncoder();
 
+/** Why a file did not open, as the reader is told it; a model's refusal is already in the reader's language. */
+const READ_ERRORS: Record<Exclude<ReadErrorCode, 'model'>, () => string> = {
+  'not-zip': () => t('files', 'This is not a timeline file.'),
+  truncated: () => t('files', 'The file is cut short — it may not have finished copying.'),
+  zip64: () => t('files', 'The file is over 4 GB, which a timeline cannot be.'),
+  'no-json': () => t('files', 'This zip has no timeline.json inside: it is not a timeline.'),
+  'json-damaged': () => t('files', 'timeline.json in this file is damaged.'),
+  'json-invalid': () => t('files', 'timeline.json in this file is not valid JSON.'),
+};
+
 /** Reads a .timeline (or a bare timeline.json, an author's convenience). */
 export async function readTimeline(file: File): Promise<Opened> {
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
   const isZip = head[0] === 0x50 && head[1] === 0x4b;
-  let json: unknown;
-  let archive: ZipArchive | null = null;
-  let prefix = '';
-  if (isZip) {
-    try {
-      archive = await openZip(blobSource(file));
-    } catch (error) {
-      if (error instanceof ZipError) {
-        throw new FileError(
-          error.code === 'truncated'
-            ? t('files', 'The file is cut short — it may not have finished copying.')
-            : error.code === 'zip64'
-              ? t('files', 'The file is over 4 GB, which a timeline cannot be.')
-              : t('files', 'This is not a timeline file.'),
-        );
-      }
-      throw error;
-    }
-    prefix = rootPrefix(archive.entries.map((entry) => entry.name));
-    const entry = archive.get(`${prefix}timeline.json`);
-    if (!entry) throw new FileError(t('files', 'This zip has no timeline.json inside: it is not a timeline.'));
-    try {
-      json = JSON.parse(await archive.text(entry));
-    } catch (error) {
-      throw new FileError(error instanceof ZipError ? t('files', 'timeline.json in this file is damaged.') : t('files', 'timeline.json in this file is not valid JSON.'));
-    }
-  } else {
+  try {
+    if (isZip) return { ...(await readArchive(blobSource(file))), name: file.name, file };
+    let json: unknown;
     try {
       json = JSON.parse(await file.text());
     } catch {
-      throw new FileError(t('files', 'This is not a timeline file.'));
+      throw new FileError(READ_ERRORS['not-zip']());
     }
-  }
-  let parsed;
-  try {
-    parsed = parseDoc(json);
+    // A bare timeline.json has no pictures beside it: every one it names is missing.
+    return { ...readDoc(json, () => false), archive: null, prefix: '', name: file.name, file };
   } catch (error) {
-    throw new FileError((error as Error).message);
+    if (error instanceof ReadError) throw new FileError(error.code === 'model' ? error.message : READ_ERRORS[error.code]());
+    throw error;
   }
-  const { doc, warnings } = parsed;
-  const zip = archive;
-  warnings.push(...mediaWarnings(doc, (path) => !!zip?.has(prefix + path)));
-  return { doc, warnings, archive, prefix, name: file.name, file };
-}
-
-/** The pictures and the music a document names but `has` (a path as the zip has it: `images/….webp`) cannot find. */
-export function mediaWarnings(doc: Doc, has: (path: string) => boolean): Warning[] {
-  const warnings = missingImages(doc, (hash, info) => has(`images/${hash}.${info.ext}`));
-  if (doc.music && !has(`audio/${doc.music.file}.${doc.music.ext}`)) {
-    warnings.push({ path: 'music', code: 'music-missing', text: t('files', 'The background music is not in the file.') });
-  }
-  return warnings;
 }
 
 /** The entries of the open file that a save carries over as they are: not timeline.json, not image files. */
@@ -108,14 +81,14 @@ export interface SaveResult {
   dropped: number;
 }
 
-/** Writes the document as a .timeline into `sink`. `doc.meta.modified` is set by the caller. */
 /** The document as a file holds it: only the pictures it uses. The one in memory keeps the rest for undo. */
 export function asWritten(doc: Doc): { written: Doc; used: string[] } {
   const used = [...usedImages(doc)].filter((hash) => doc.images[hash]).sort();
   return { written: { ...doc, images: Object.fromEntries(used.map((hash) => [hash, doc.images[hash]!])) }, used };
 }
 
-export async function writeTimeline(doc: Doc, store: ImageStore, archive: ZipArchive | null, prefix: string, sink: Sink): Promise<SaveResult> {
+/** Writes the document as a .timeline into `sink`. `doc.meta.modified` is set by the caller. */
+async function writeTimeline(doc: Doc, store: ImageStore, archive: ZipArchive | null, prefix: string, sink: Sink): Promise<SaveResult> {
   const writer = new ZipWriter(sink);
   const { written, used } = asWritten(doc);
   await writer.add('timeline.json', encoder.encode(serializeDoc(written)));
@@ -193,13 +166,13 @@ export async function saveToHandle(handle: FileSystemFileHandle, doc: Doc, store
   }
 }
 
-/** A safe file name from a title: "The Bible" → "the-bible.en.timeline". */
+/** A safe file name from the file's id: "flight.en" → "flight.en.timeline". */
 export function fileNameFor(doc: Doc): string {
   const base = doc.meta.id && doc.meta.id !== 'untitled' ? doc.meta.id : 'timeline';
   return `${base.replace(/[^A-Za-z0-9._-]+/g, '-')}.timeline`;
 }
 
-export function download(blob: Blob, name: string): void {
+function download(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -211,7 +184,7 @@ export function download(blob: Blob, name: string): void {
 }
 
 /** iOS has no downloads folder: "Share → Save to Files". True if the share sheet took it. */
-export async function shareFile(blob: Blob, name: string): Promise<boolean> {
+async function shareFile(blob: Blob, name: string): Promise<boolean> {
   const file = new File([blob], name, { type: blob.type || 'application/zip' });
   if (!navigator.canShare?.({ files: [file] })) return false;
   try {
@@ -229,4 +202,40 @@ export function sizeText(bytes: number): string {
 
 export const canSaveInPlace = (): boolean => typeof window !== 'undefined' && 'showSaveFilePicker' in window;
 
-export const PICKER_TYPES = [{ description: 'Timeline', accept: { 'application/zip': ['.timeline'] as `.${string}`[] } }];
+export type PickerType = { description: string; accept: Record<string, `.${string}`[]> };
+
+export const PICKER_TYPES: PickerType[] = [{ description: 'Timeline', accept: { 'application/zip': ['.timeline'] } }];
+
+/** The browser's open dialog, where it has one (Chrome, Edge); elsewhere a file input does. */
+export const openPicker = (): ((options: unknown) => Promise<FileSystemFileHandle[]>) | undefined =>
+  (window as unknown as { showOpenFilePicker?: (options: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker;
+
+/**
+ * Where to write: a handle from the save dialog, null where the browser has
+ * none (the file is handed over by deliver()), false when the reader cancelled.
+ */
+export async function pickSaveFile(name: string, types: PickerType[]): Promise<FileSystemFileHandle | null | false> {
+  if (!canSaveInPlace()) return null;
+  try {
+    return await (window as unknown as { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({ suggestedName: name, types });
+  } catch {
+    return false;
+  }
+}
+
+/** A file made in memory, handed over without a handle: on iOS the share sheet ("Save to Files"), elsewhere a download. */
+export async function deliver(blob: Blob, name: string): Promise<void> {
+  if (!(/iPhone|iPad/.test(navigator.userAgent) && (await shareFile(blob, name)))) download(blob, name);
+}
+
+/** Writes a blob through a handle; a write that fails is abandoned, and the file stays as it was. */
+export async function writeBlob(handle: FileSystemFileHandle, blob: Blob): Promise<void> {
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(blob);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => undefined);
+    throw error;
+  }
+}

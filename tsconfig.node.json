@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["build.mjs", "tools/*.mjs", "tests/*.mjs"]
+}

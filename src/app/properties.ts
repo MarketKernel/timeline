@@ -12,21 +12,21 @@
 import { imageChange, fieldChange, type Change } from '../core/commands';
 import { isNow, startOf, today, type End, type When } from '../core/dates';
 import { language, t } from '../core/i18n';
-import { AUDIO_EXTS, DEFAULT_COLOR, emptyDoc, LANG_PATTERN, TEXTURES, type AudioExt, type Music, type Doc, type ImageInfo, type Style, type Texture, type TitleFont, type ViewSpec } from '../core/model';
+import { AUDIO_EXTS, DEFAULT_COLOR, emptyDoc, LANG_PATTERN, TEXTURES, type AudioExt, type Author, type Music, type Doc, type ImageInfo, type Style, type Texture, type TitleFont, type ViewSpec } from '../core/model';
 import { describeScale, PRESETS, presetsFor, specText, type ScaleSpec } from '../core/scale';
-import { paperTones, STOCK_PAPER, type PaperTone } from '../core/style';
+import { STOCK_PAPER } from '../core/style';
 import { contentHash } from '../core/hash';
 import { newDocId } from '../core/templates';
 import { byId, h } from './dom';
-import { colorField, dateField, setEditing } from './editor';
+import { setEditing } from './editing';
+import { colorField, dateField, field, group, hint, section } from './forms';
 import { AUDIO_MIME, encodeImage, type NewImage } from './images';
 import { syncMusic } from './music';
 import { pickFromLibrary } from './library';
+import { applyStyle, canon } from './look';
 import { openNew } from './session';
 import { app, on } from './state';
 import { dialog, toast } from './ui';
-
-const TONES: readonly PaperTone[] = ['paper', 'paper-raised', 'paper-sunk', 'rule', 'rule-strong'];
 
 /** Papers offered first: white, linen, sand, rose, lavender, blue, sage, cool grey — all pale enough for the ink. */
 const PAPERS = ['#fbfaf7', '#f1ebe1', '#f3e4c4', '#f5e8e4', '#eeeaf3', '#e7eef6', '#e9efe2', '#eceeef'];
@@ -43,33 +43,7 @@ function languageName(code: string): string {
   }
 }
 
-/**
- * Puts the open file's look on the page — or the stock look when no file is
- * open. On :root, so the details panel and the dialogs wear it too; called
- * again when the theme changes, since the dark theme has its own paper.
- */
-export function applyStyle(style: Style | undefined = app.session?.doc.style): void {
-  const root = document.documentElement;
-  const tones = style?.paper ? paperTones(style.paper, root.dataset.theme === 'dark') : null;
-  for (const tone of TONES) {
-    if (tones) root.style.setProperty(`--${tone}`, tones[tone]);
-    else root.style.removeProperty(`--${tone}`);
-  }
-  if (style?.texture && style.texture !== 'grain') root.dataset.texture = style.texture;
-  else delete root.dataset.texture;
-  if (style?.font === 'sans') root.style.setProperty('--serif', 'var(--sans)');
-  else root.style.removeProperty('--serif');
-  app.minimap?.invalidate();
-}
 
-/** One spelling per value, whatever order its keys were made in. */
-const canon = (value: unknown): string =>
-  JSON.stringify(value, (_, v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v)) ?? '';
-
-const section = (title: string) => h('h3', { class: 'form-section' }, title);
-const hint = (text: string) => h('p', { class: 'field-hint' }, text);
-const field = (label: string, control: HTMLElement, ...more: (HTMLElement | null)[]) => h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, ...more);
-const group = (label: string, ...children: (HTMLElement | null)[]) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), ...children);
 
 /** A row of radio buttons drawn as one control. */
 function segmented<T extends string>(name: string, label: string, options: [T, string, string?][], checked: T): { el: HTMLElement; value: () => T } {
@@ -93,6 +67,7 @@ interface Fields {
   lang: string;
   title: string;
   description?: string;
+  author?: Author;
   start?: When;
   end?: End;
   cover?: string;
@@ -148,6 +123,10 @@ function settingsForm(doc: Doc, session: Session) {
   // What it is.
   const title = h('input', { class: 'field-input', type: 'text', id: 'timeline-title', lang, value: doc.title, autofocus: true, placeholder: t('properties', 'The history of …') });
   const description = h('textarea', { class: 'field-input', rows: '3', id: 'timeline-description', lang }, doc.description ?? '');
+  // Who made it, all of it optional: a name (in the file's language), a website, a way to reach them.
+  const authorName = h('input', { class: 'field-input', type: 'text', id: 'timeline-author-name', lang, value: doc.author?.name ?? '', 'aria-label': t('properties', 'Name'), placeholder: t('properties', 'Name') });
+  const authorUrl = h('input', { class: 'field-input', type: 'url', id: 'timeline-author-url', value: doc.author?.url ?? '', 'aria-label': t('properties', 'Website'), placeholder: 'https://…' });
+  const authorContact = h('input', { class: 'field-input', type: 'text', id: 'timeline-author-contact', value: doc.author?.contact ?? '', 'aria-label': t('properties', 'Contact'), placeholder: t('properties', 'E-mail, phone, …') });
 
   // The cover: any picture — from a file, a library file, or pasted.
   let cover: Cover | null = doc.cover && doc.images[doc.cover] ? { hash: doc.cover, info: doc.images[doc.cover]! } : null;
@@ -156,7 +135,10 @@ function settingsForm(doc: Doc, session: Session) {
   const removeCover = h('button', { class: 'text-button text-button--danger', type: 'button' }, t('properties', 'Remove'));
   let coverHeld: string | null = null;
   let coverUrl: string | null = null;
+  /** Counts what the tile has shown: a thumb that arrives after the next one, or after the form closed, is given back. */
+  let coverTurn = 0;
   const letGo = () => {
+    coverTurn++;
     if (coverHeld) session?.store.release(coverHeld);
     if (coverUrl) URL.revokeObjectURL(coverUrl);
     coverHeld = coverUrl = null;
@@ -169,8 +151,15 @@ function settingsForm(doc: Doc, session: Session) {
     if (!cover) return coverImage.removeAttribute('src');
     if (cover.encoded) coverImage.src = coverUrl = URL.createObjectURL(cover.encoded.thumb);
     else if (session) {
-      coverHeld = cover.hash;
-      coverImage.src = (await session.store.thumb(cover.hash)) ?? '';
+      const { hash } = cover;
+      const turn = coverTurn;
+      const url = await session.store.thumb(hash);
+      if (turn !== coverTurn) {
+        if (url) session.store.release(hash);
+        return;
+      }
+      coverHeld = url ? hash : null;
+      coverImage.src = url ?? '';
     }
   };
   const inFile = (hash: string): Cover | null => (doc.images[hash] ? { hash, info: doc.images[hash]! } : null);
@@ -375,6 +364,11 @@ function settingsForm(doc: Doc, session: Session) {
     section(t('properties', 'About')),
     field(t('properties', 'Title'), title),
     field(t('properties', 'Description'), description, hint(t('properties', 'A paragraph for the library shelf.'))),
+    group(
+      t('properties', 'Author'),
+      h('div', { class: 'author-fields' }, authorName, authorUrl, authorContact),
+      hint(t('properties', 'Optional: who made the timeline, and how to reach them.')),
+    ),
     coverField,
     field(t('properties', 'Language of its texts'), languageSelect, hint(t('properties', 'A translation is another file.'))),
     section(t('properties', 'Time')),
@@ -418,7 +412,23 @@ function settingsForm(doc: Doc, session: Session) {
     if (!name) return t('properties', 'Give it a title.');
     const code = languageSelect.value;
     if (!LANG_PATTERN.test(code)) return t('properties', 'The language is a code like en, ru or pt-BR.');
-    const fields: Fields = { lang: code, title: name, description: description.value.trim() || undefined, cover: cover?.hash, style: readStyle() };
+    // Fields of an author that a newer version wrote are kept, whatever is typed here.
+    const author: Author = doc.author?.extra ? { extra: doc.author.extra } : {};
+    const who = authorName.value.trim();
+    const site = authorUrl.value.trim();
+    const contact = authorContact.value.trim();
+    if (site && !/^https?:\/\/\S+$/i.test(site)) return t('properties', 'The website must start with https:// or http://');
+    if (who) author.name = who;
+    if (site) author.url = site;
+    if (contact) author.contact = contact;
+    const fields: Fields = {
+      lang: code,
+      title: name,
+      description: description.value.trim() || undefined,
+      author: Object.keys(author).length ? author : undefined,
+      cover: cover?.hash,
+      style: readStyle(),
+    };
     if (tune) {
       const music: Music = { ...tune.music };
       const what = tuneTitle.value.trim();
@@ -490,7 +500,7 @@ async function runForm(doc: Doc, session: Session, creating: boolean): Promise<{
 }
 
 /** The settings of the open file. */
-export async function timelineSettings(): Promise<void> {
+async function timelineSettings(): Promise<void> {
   const session = app.session;
   if (!session) return;
   const doc = session.doc;

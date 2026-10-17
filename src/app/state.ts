@@ -47,6 +47,12 @@ type Events = {
   settings: void;
   editing: boolean;
   language: void;
+  /** The start screen is shown: the recent files and the shelf are drawn again. */
+  start: void;
+  /** "Count years from here" on an item. */
+  anchor: string;
+  /** The PWA's update state changed. */
+  update: void;
 };
 
 const listeners = new Map<keyof Events, Set<(value: never) => void>>();

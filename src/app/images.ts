@@ -17,7 +17,7 @@ import type { AudioExt, ImageExt } from '../core/model';
 import type { ZipArchive } from '../core/zip';
 import type { ImageSource } from './view';
 
-export const MIME: Record<ImageExt, string> = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', svg: 'image/svg+xml' };
+const MIME: Record<ImageExt, string> = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', svg: 'image/svg+xml' };
 
 export const AUDIO_MIME: Record<AudioExt, string> = {
   mp3: 'audio/mpeg',
@@ -69,11 +69,12 @@ export class ImageStore implements ImageSource {
   private readonly pending = new Map<string, Promise<string | null>>();
   private readonly panel: string[] = [];
   private clock = 0;
+  private disposed = false;
 
   constructor(
     private archive: ZipArchive | null,
     private prefix = '',
-    private extOf: (hash: string) => ImageExt | undefined = () => 'webp',
+    private readonly extOf: (hash: string) => ImageExt | undefined = () => 'webp',
     private readonly folder: MediaFolder | null = null,
   ) {}
 
@@ -86,10 +87,6 @@ export class ImageStore implements ImageSource {
   rebase(archive: ZipArchive | null, prefix = ''): void {
     this.archive = archive;
     this.prefix = prefix;
-  }
-
-  setExtLookup(extOf: (hash: string) => ImageExt | undefined): void {
-    this.extOf = extOf;
   }
 
   /** Whether the file (or this session) has both sizes of the image. */
@@ -141,6 +138,11 @@ export class ImageStore implements ImageSource {
     const url = await loading;
     this.pending.delete(key);
     if (!url) return null;
+    // The file was closed while it loaded: no card is left to let go of it.
+    if (this.disposed) {
+      revoke(url);
+      return null;
+    }
     const existing = this.thumbs.get(key);
     if (existing) {
       if (existing.url !== url) revoke(url);
@@ -156,8 +158,15 @@ export class ImageStore implements ImageSource {
     const cached = this.thumbs.get((large ? 'l' : 't') + hash);
     if (!cached) return;
     cached.refs = Math.max(0, cached.refs - 1);
-    this.evict();
+    // A rebuild lets go of many cards at once: the cache is trimmed once after them, not once for each.
+    if (this.evicting) return;
+    this.evicting = true;
+    queueMicrotask(() => {
+      this.evicting = false;
+      this.evict();
+    });
   }
+  private evicting = false;
 
   private evict(): void {
     for (const [kind, spare] of [['t', SPARE], ['l', SPARE_LARGE]] as const) {
@@ -205,6 +214,7 @@ export class ImageStore implements ImageSource {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const c of this.thumbs.values()) revoke(c.url);
     this.thumbs.clear();
     this.panel.length = 0;
@@ -216,8 +226,8 @@ export class ImageStore implements ImageSource {
  * ------------------------------------------------------------------ */
 
 
-export const THUMB_SIZE = 192;
-export const IMAGE_SIZE = 1280;
+const THUMB_SIZE = 192;
+const IMAGE_SIZE = 1280;
 
 export interface Encoded extends NewImage {
   hash: string;
@@ -249,7 +259,12 @@ async function decode(blob: Blob): Promise<{ source: CanvasImageSource; w: numbe
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.src = url;
-    await img.decode();
+    try {
+      await img.decode();
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
     const w = img.naturalWidth || 1280;
     const h = img.naturalHeight || 960;
     return { source: img, w, h, close: () => URL.revokeObjectURL(url) };

@@ -1,8 +1,7 @@
 /** Day numbers, calendars, display and the source date strings (Task §11). */
 import { checker, load } from '../tools/load.mjs';
 
-const { dayOf, dateOf, isLeap, daysInMonth, startOf, endOf, midOf, formatWhen, formatYear, formatRange, formatDuration, parseWhen, whenText, snapTo, shiftWhen, weekday, isValidWhen } = await load('core/dates');
-const { setLanguage } = await load('core/i18n');
+const { dayOf, dateOf, isLeap, daysInMonth, startOf, endOf, midOf, formatWhen, formatYear, formatRange, formatDuration, parseWhen, whenText, snapTo, shiftWhen, weekday, isValidWhen, setLanguage } = await load('core/dates', 'core/i18n');
 const { check, done } = checker();
 const NB = ' ';
 const nb = (s) => s.replaceAll(' ', NB);

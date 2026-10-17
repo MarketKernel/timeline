@@ -18,11 +18,12 @@
  * A data block is not a script: the policy's hash still pins the only one.
  */
 
+import { readDoc } from '../core/archive';
 import { t } from '../core/i18n';
-import { parseDoc, serializeDoc } from '../core/model';
+import { serializeDoc } from '../core/model';
 import { ZipWriter } from '../core/zip';
 import { h } from './dom';
-import { asWritten, canSaveInPlace, download, mediaWarnings, readTimeline, shareFile, sizeText, timelineBlob, type Opened } from './files';
+import { asWritten, deliver, pickSaveFile, readTimeline, sizeText, timelineBlob, writeBlob, type Opened, type PickerType } from './files';
 import { PAGE_SOURCE } from './source';
 import { app, type Session } from './state';
 import { dialog, toast } from './ui';
@@ -59,9 +60,8 @@ export function embeddedTimeline(): Embedded | null {
 export async function readEmbedded(data: Embedded): Promise<Omit<Opened, 'file'>> {
   const zip = document.getElementById(ZIP)?.textContent;
   if (zip) return readTimeline(new File([fromBase64(zip) as Uint8Array<ArrayBuffer>], data.name));
-  const { doc, warnings } = parseDoc(data.timeline);
   const files = new Set(data.files ?? []);
-  warnings.push(...mediaWarnings(doc, (path) => files.has(path)));
+  const { doc, warnings } = readDoc(data.timeline, (path) => files.has(path));
   return { doc, warnings, archive: null, prefix: '', name: data.name, folder: { base: data.media ?? '', files } };
 }
 
@@ -102,22 +102,6 @@ async function askWhere(): Promise<Where | null> {
   return body.querySelector<HTMLInputElement>('input[name="export-where"]:checked')?.value === 'folder' ? 'folder' : 'inside';
 }
 
-type PickerType = { description: string; accept: Record<string, `.${string}`[]> };
-
-/**
- * Where to write: a handle from the save dialog, null for a download, false when cancelled.
- * Asked before anything is made — the browser lets a page open the dialog only just
- * after a click, and the pictures of a large timeline take a while to gather.
- */
-async function saveTarget(name: string, type: PickerType): Promise<FileSystemFileHandle | null | false> {
-  if (!canSaveInPlace()) return null;
-  try {
-    return await (window as unknown as { showSaveFilePicker: (o: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({ suggestedName: name, types: [type] });
-  } catch {
-    return false;
-  }
-}
-
 /** Exports the open timeline as a web page; asks where its pictures go, when it has any. */
 export async function exportPage(): Promise<void> {
   const session = app.session;
@@ -127,22 +111,17 @@ export async function exportPage(): Promise<void> {
   if (!where) return;
   const base = session.name.replace(/\.(timeline|zip|json)$/i, '') || 'timeline';
   const name = where === 'inside' ? `${base}.html` : `${base}.zip`;
-  const target = await saveTarget(
-    name,
-    where === 'inside' ? { description: t('export', 'Web page'), accept: { 'text/html': ['.html'] } } : { description: t('export', 'Zip archive'), accept: { 'application/zip': ['.zip'] } },
-  );
+  const type: PickerType = where === 'inside' ? { description: t('export', 'Web page'), accept: { 'text/html': ['.html'] } } : { description: t('export', 'Zip archive'), accept: { 'application/zip': ['.zip'] } };
+  // Asked before anything is made: the browser lets a page open the dialog only just after a click,
+  // and the pictures of a large timeline take a while to gather.
+  const target = await pickSaveFile(name, [type]);
   if (target === false) return;
   app.busy = true;
   const working = toast(t('export', 'Exporting {name}…', { name }), { duration: 0 });
   try {
     const blob = where === 'inside' ? await insidePage(session, base) : await folderZip(session, base);
-    if (target) {
-      const writable = await target.createWritable();
-      await writable.write(blob);
-      await writable.close();
-    } else if (!(/iPhone|iPad/.test(navigator.userAgent) && (await shareFile(blob, name)))) {
-      download(blob, name);
-    }
+    if (target) await writeBlob(target, blob);
+    else await deliver(blob, name);
     toast(t('export', 'Exported {name}, {size}', { name: target ? target.name : name, size: sizeText(blob.size) }));
   } catch (error) {
     toast(t('export', 'Could not export: {error}', { error: String((error as Error).message ?? error) }), { kind: 'error', duration: 10000 });

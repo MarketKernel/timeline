@@ -23,8 +23,7 @@ export async function load(...modules) {
     format: 'cjs',
     platform: 'node',
     target: 'node22',
-    define: { __APP_VERSION__: '"0.0.0-test"' },
-    loader: { '.svg': 'text' },
+    define: { __APP_VERSION__: '"0.0.0-test"', __APP_HOME__: '"https://example.org/timeline"' },
     write: false,
     logLevel: 'silent',
   });

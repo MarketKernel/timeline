@@ -11,6 +11,7 @@ _OLD/
 # Working notes for the author and the agent: the specification, Claude Code's instructions and settings
 CLAUDE.md
 Task.md
+next_tasks.md
 .claude/
 
 # Screenshots from `npm run shots -- <dir>`

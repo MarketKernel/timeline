@@ -21,7 +21,7 @@ import { endDay, endOf, isNow, isValidWhen, midOf, startOf, todayDay, YEAR_DAYS,
 import { t } from './i18n';
 import { isUnit, type ScaleSpec } from './scale';
 
-export const FORMAT = 'timeline';
+const FORMAT = 'timeline';
 export const VERSION = 1;
 
 type Extra = Record<string, unknown>;
@@ -79,7 +79,7 @@ export interface Anchor {
   /** … an item whose start is the anchor ("birth"). */
   item?: string;
   label: string;
-  /** What the anchor's own year is called: 1 for Anno Mundi, 0 for an age. */
+  /** What the anchor's own year is called: 1 for a city's first year, 0 for an age. */
   base?: number;
   extra?: Extra;
 }
@@ -149,6 +149,21 @@ export interface Item {
   shape?: Exclude<CardShape, 'card'>;
   /** The row fixed by hand: a card's row above the axis, a bar's row in its band. */
   lane?: number;
+  /**
+   * An event's card moved by hand: px to the right of where it would stand
+   * (negative: to the left). Its date and its dot stay; a line joins them.
+   */
+  shift?: number;
+  extra?: Extra;
+}
+
+/** Who made the chronology, and how to reach them: each part is optional. */
+export interface Author {
+  name?: string;
+  /** Their website: http(s) only. */
+  url?: string;
+  /** An e-mail, a phone, a handle — as they wrote it. */
+  contact?: string;
   extra?: Extra;
 }
 
@@ -161,6 +176,7 @@ export interface Doc {
   title: string;
   description?: string;
   sources?: string;
+  author?: Author;
   /** Where the chronology begins, when not at its first item. */
   start?: When;
   /** Where it ends — a date, or today; the strip stops there as it does at the start. */
@@ -197,16 +213,19 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const isString = (v: unknown): v is string => typeof v === 'string';
 
 /** A text: a string with something in it. */
-export const asText = (v: unknown): string | null => (isString(v) && v ? v : null);
+const asText = (v: unknown): string | null => (isString(v) && v ? v : null);
 
 export const LANG_PATTERN = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
-export const HASH_PATTERN = /^[0-9a-f]{8,64}$/;
+const HASH_PATTERN = /^[0-9a-f]{8,64}$/;
 const COLOR_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 /** "#ABC" → "#aabbcc": one spelling per colour, the one a colour input gives back. */
 const normalColor = (color: string): string => (color.length === 4 ? `#${[...color.slice(1)].map((c) => c + c).join('')}` : color).toLowerCase();
 const IMAGE_EXTS: readonly ImageExt[] = ['webp', 'png', 'jpg', 'svg'];
+
+/** A website: http(s), nothing else. */
+const isWebUrl = (v: unknown): v is string => isString(v) && /^https?:\/\/[^\s]+$/i.test(v);
 
 /** A link the user may open: http(s) or mailto, nothing that runs. */
 export const isSafeUrl = (v: unknown): v is string => isString(v) && /^(https?:\/\/|mailto:)[^\s]+$/i.test(v);
@@ -220,15 +239,16 @@ function extraOf(source: Record<string, unknown>, known: readonly string[]): Ext
 }
 
 const KEYS = {
-  doc: ['format', 'version', 'lang', 'meta', 'title', 'description', 'sources', 'start', 'end', 'cover', 'anchor', 'style', 'music', 'images', 'items', 'view'],
+  doc: ['format', 'version', 'lang', 'meta', 'title', 'description', 'sources', 'author', 'start', 'end', 'cover', 'anchor', 'style', 'music', 'images', 'items', 'view'],
   meta: ['id', 'kind', 'created', 'modified', 'generator'],
   image: ['ext', 'w', 'h', 'caption', 'credit'],
   credit: ['author', 'source', 'license', 'url'],
+  author: ['name', 'url', 'contact'],
   anchor: ['at', 'item', 'label', 'base'],
   style: ['paper', 'texture', 'color', 'font'],
   music: ['file', 'ext', 'title', 'credit'],
   view: ['center', 'scale'],
-  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'image', 'gallery', 'size', 'shape', 'lane'],
+  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'image', 'gallery', 'size', 'shape', 'lane', 'shift'],
   when: ['y', 'm', 'd', 'approx', 'spread'],
 } as const;
 
@@ -239,7 +259,12 @@ const KEYS = {
  * a minor one a small card). They are not kept in `extra` — what replaced
  * them says the same.
  */
+/** How far a card may stand from its dot, px: a few screens, not a stray drag across the world. */
+export const MAX_SHIFT = 5000;
+
 const RETIRED = { doc: ['categories', 'tracks'], item: ['category', 'track', 'importance'] } as const;
+/** What an item may hold, a retired field included (it is read, then left out). */
+const ITEM_KEYS: readonly string[] = [...KEYS.item, ...RETIRED.item];
 
 function readWhen(v: unknown): When | null {
   if (!isValidWhen(v)) return null;
@@ -250,6 +275,12 @@ function readWhen(v: unknown): When | null {
   if (v.spread) out.spread = v.spread;
   return out;
 }
+
+/** An end: a date, or `{ "now": true }` for one that runs to today. */
+const readEnd = (v: unknown): End | null => (isObject(v) && v.now === true ? { now: true } : readWhen(v));
+
+/** A colour as `#abc` or `#aabbcc`, spelt the one way. */
+const readColor = (v: unknown): string | null => (isString(v) && COLOR_PATTERN.test(v) ? normalColor(v) : null);
 
 export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
   if (!isObject(json)) throw new ModelError(t('model', 'This is not a timeline: timeline.json holds no object'));
@@ -285,21 +316,39 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
   if (isString(json.lang) && LANG_PATTERN.test(json.lang)) lang = json.lang;
   else if (json.lang !== undefined) dropped('lang');
 
+  const title = asText(json.title);
   const doc: Doc = {
     format: FORMAT,
     version,
     lang,
     meta,
-    title: asText(json.title) ?? 'Untitled',
+    title: title ?? 'Untitled',
     images: {},
     items: [],
   };
-  if (!asText(json.title)) dropped('title');
+  if (!title) dropped('title');
   for (const key of ['description', 'sources'] as const) {
     if (json[key] === undefined) continue;
     const text = asText(json[key]);
     if (text) doc[key] = text;
     else dropped(key);
+  }
+
+  // Who made it: a name, a website, a way to reach them — each optional.
+  if (json.author !== undefined) {
+    if (isObject(json.author)) {
+      const value = json.author;
+      const author: Author = {};
+      for (const key of ['name', 'url', 'contact'] as const) {
+        if (value[key] === undefined) continue;
+        const text = key === 'url' ? (isWebUrl(value.url) ? value.url : null) : asText(value[key]);
+        if (text) author[key] = text;
+        else dropped(`author.${key}`);
+      }
+      const extra = extraOf(value, KEYS.author);
+      if (extra) author.extra = extra;
+      if (Object.keys(author).length) doc.author = author;
+    } else dropped('author');
   }
 
   // Where the chronology begins and ends, when the author says so.
@@ -309,7 +358,7 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
     else dropped('start');
   }
   if (json.end !== undefined) {
-    const end: End | null = isObject(json.end) && json.end.now === true ? { now: true } : readWhen(json.end);
+    const end = readEnd(json.end);
     if (end && (!doc.start || isNow(end) || endDay(end) > startOf(doc.start))) doc.end = end;
     else dropped('end');
   }
@@ -318,13 +367,32 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
   const categoryColors = new Map<string, string>();
   if (Array.isArray(json.categories)) {
     for (const c of json.categories as unknown[]) {
-      if (isObject(c) && isString(c.id) && isString(c.color) && COLOR_PATTERN.test(c.color)) categoryColors.set(c.id, normalColor(c.color));
+      if (!isObject(c) || !isString(c.id)) continue;
+      const color = readColor(c.color);
+      if (color) categoryColors.set(c.id, color);
     }
   }
   // Every file of the time wrote both lists, mostly empty: only one that had some says so.
   if (RETIRED.doc.some((key) => Array.isArray(json[key]) ? (json[key] as unknown[]).length > 0 : json[key] !== undefined)) {
     warn('categories', 'fixed', t('model', 'Categories and tracks are no longer used: each item keeps its category’s colour as its own'));
   }
+
+  /** A picture's or the music's credit: the same fields, the same warnings. */
+  const readCredit = (value: unknown, path: string): Credit | null => {
+    if (!isObject(value)) {
+      dropped(path);
+      return null;
+    }
+    const credit: Credit = {};
+    for (const key of ['author', 'source', 'license'] as const) if (isString(value[key])) credit[key] = value[key];
+    if (value.url !== undefined) {
+      if (isSafeUrl(value.url)) credit.url = value.url;
+      else dropped(`${path}.url`);
+    }
+    const extra = extraOf(value, KEYS.credit);
+    if (extra) credit.extra = extra;
+    return credit;
+  };
 
   // images
   if (json.images !== undefined && !isObject(json.images)) dropped('images');
@@ -348,17 +416,8 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
       else dropped(`${path}.caption`);
     }
     if (value.credit !== undefined) {
-      if (isObject(value.credit)) {
-        const credit: Credit = {};
-        for (const key of ['author', 'source', 'license'] as const) if (isString(value.credit[key])) credit[key] = value.credit[key];
-        if (value.credit.url !== undefined) {
-          if (isSafeUrl(value.credit.url)) credit.url = value.credit.url;
-          else dropped(`${path}.credit.url`);
-        }
-        const extra = extraOf(value.credit, KEYS.credit);
-        if (extra) credit.extra = extra;
-        info.credit = credit;
-      } else dropped(`${path}.credit`);
+      const credit = readCredit(value.credit, `${path}.credit`);
+      if (credit) info.credit = credit;
     }
     const extra = extraOf(value, KEYS.image);
     if (extra) info.extra = extra;
@@ -379,13 +438,14 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
     if (kind !== 'event' && kind !== 'period' && kind !== 'era') return skip(t('model', 'unknown kind'));
     const start = readWhen(value.start);
     if (!start) return skip(t('model', 'no valid start date'));
-    const item: Item = { id, kind, start, title: asText(value.title) ?? id };
-    if (!asText(value.title)) dropped(`${path}.title`);
+    const title = asText(value.title);
+    const item: Item = { id, kind, start, title: title ?? id };
+    if (!title) dropped(`${path}.title`);
 
     if (kind === 'event') {
       if (value.end !== undefined) dropped(`${path}.end`);
     } else {
-      let end: End | null = isObject(value.end) && value.end.now === true ? { now: true } : readWhen(value.end);
+      let end = readEnd(value.end);
       if (!end) return skip(kind === 'era' ? t('model', 'an era needs an end date') : t('model', 'a period needs an end date'));
       if (!isNow(end) && endDay(end) <= startOf(start)) {
         // Written the wrong way round: the dates are kept, swapped.
@@ -411,11 +471,13 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
       } else dropped(`${path}.links`);
     }
     if (value.color !== undefined) {
-      if (isString(value.color) && COLOR_PATTERN.test(value.color)) item.color = normalColor(value.color);
+      const color = readColor(value.color);
+      if (color) item.color = color;
       else dropped(`${path}.color`);
     } else if (isString(value.category) && categoryColors.has(value.category)) item.color = categoryColors.get(value.category);
     if (value.background !== undefined) {
-      if (kind === 'event' && isString(value.background) && COLOR_PATTERN.test(value.background)) item.background = normalColor(value.background);
+      const background = kind === 'event' ? readColor(value.background) : null;
+      if (background) item.background = background;
       else dropped(`${path}.background`);
     }
     if (value.tags !== undefined) {
@@ -455,7 +517,11 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
       if (Number.isInteger(value.lane) && (value.lane as number) >= 0 && (value.lane as number) < 100) item.lane = value.lane as number;
       else dropped(`${path}.lane`);
     }
-    const extra = extraOf(value, [...KEYS.item, ...RETIRED.item]);
+    if (value.shift !== undefined) {
+      if (kind === 'event' && Number.isInteger(value.shift) && Math.abs(value.shift as number) <= MAX_SHIFT) item.shift = value.shift as number;
+      else dropped(`${path}.shift`);
+    }
+    const extra = extraOf(value, ITEM_KEYS);
     if (extra) item.extra = extra;
     itemIds.add(id);
     doc.items.push(item);
@@ -487,7 +553,8 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
       const style: Style = {};
       for (const key of ['paper', 'color'] as const) {
         if (s[key] === undefined) continue;
-        if (isString(s[key]) && COLOR_PATTERN.test(s[key])) style[key] = normalColor(s[key]);
+        const color = readColor(s[key]);
+        if (color) style[key] = color;
         else dropped(`style.${key}`);
       }
       if (s.texture !== undefined) {
@@ -513,14 +580,10 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
         if (title) music.title = title;
         else dropped('music.title');
       }
-      if (isObject(m.credit)) {
-        const credit: Credit = {};
-        for (const key of ['author', 'source', 'license'] as const) if (isString(m.credit[key])) credit[key] = m.credit[key];
-        if (isSafeUrl(m.credit.url)) credit.url = m.credit.url;
-        const extra = extraOf(m.credit, KEYS.credit);
-        if (extra) credit.extra = extra;
-        music.credit = credit;
-      } else if (m.credit !== undefined) dropped('music.credit');
+      if (m.credit !== undefined) {
+        const credit = readCredit(m.credit, 'music.credit');
+        if (credit) music.credit = credit;
+      }
       const extra = extraOf(m, KEYS.music);
       if (extra) music.extra = extra;
       doc.music = music;
@@ -573,6 +636,7 @@ function ordered(fields: [string, unknown][], extra?: Extra): Record<string, unk
 }
 
 const whenOut = (w: When | undefined) => w && ordered(KEYS.when.map((k) => [k, w[k]]));
+const creditOut = (c: Credit | undefined) => c && ordered(KEYS.credit.map((k) => [k, c[k]]), c.extra);
 const endOut = (e: End | undefined) => (e === undefined ? undefined : isNow(e) ? { now: true } : whenOut(e));
 
 /** Where an item sits in time, for sorting: its start, events at their middle. */
@@ -580,8 +644,14 @@ export const itemDay = (item: Item): number => (item.kind === 'event' ? midOf(it
 const KIND_ORDER: Record<ItemKind, number> = { era: 0, period: 1, event: 2 };
 export const compareItems = (a: Item, b: Item): number => itemDay(a) - itemDay(b) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-export function docToJson(doc: Doc): Record<string, unknown> {
-  const items = [...doc.items].sort(compareItems).map((item) =>
+/** Items in compareItems' order, each one's day worked out once rather than at every comparison. */
+export function inTimeOrder(items: readonly Item[]): Item[] {
+  const days = new Map(items.map((item) => [item, itemDay(item)]));
+  return [...items].sort((a, b) => days.get(a)! - days.get(b)! || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+function docToJson(doc: Doc): Record<string, unknown> {
+  const items = inTimeOrder(doc.items).map((item) =>
     ordered(
       [
         ['id', item.id],
@@ -600,6 +670,7 @@ export function docToJson(doc: Doc): Record<string, unknown> {
         ['size', item.size],
         ['shape', item.shape],
         ['lane', item.lane],
+        ['shift', item.shift],
       ],
       item.extra,
     ),
@@ -609,8 +680,7 @@ export function docToJson(doc: Doc): Record<string, unknown> {
       .sort()
       .map((hash) => {
         const i = doc.images[hash]!;
-        const credit = i.credit && ordered(KEYS.credit.map((k) => [k, i.credit![k]]), i.credit.extra);
-        return [hash, ordered([['ext', i.ext], ['w', i.w], ['h', i.h], ['caption', i.caption], ['credit', credit]], i.extra)];
+        return [hash, ordered([['ext', i.ext], ['w', i.w], ['h', i.h], ['caption', i.caption], ['credit', creditOut(i.credit)]], i.extra)];
       }),
   );
   const m = doc.meta;
@@ -626,12 +696,13 @@ export function docToJson(doc: Doc): Record<string, unknown> {
       ['title', doc.title],
       ['description', doc.description],
       ['sources', doc.sources],
+      ['author', doc.author && ordered(KEYS.author.map((k) => [k, doc.author![k as keyof Author]]), doc.author.extra)],
       ['start', whenOut(doc.start)],
       ['end', endOut(doc.end)],
       ['cover', doc.cover],
       ['anchor', a && ordered([['at', whenOut(a.at)], ['item', a.item], ['label', a.label], ['base', a.base]], a.extra)],
       ['style', s && ordered(KEYS.style.map((k) => [k, s[k]]), s.extra)],
-      ['music', doc.music && ordered([['file', doc.music.file], ['ext', doc.music.ext], ['title', doc.music.title], ['credit', doc.music.credit && ordered(KEYS.credit.map((k) => [k, doc.music!.credit![k]]), doc.music.credit.extra)]], doc.music.extra)],
+      ['music', doc.music && ordered([['file', doc.music.file], ['ext', doc.music.ext], ['title', doc.music.title], ['credit', creditOut(doc.music.credit)]], doc.music.extra)],
       ['images', images],
       ['items', items],
       ['view', v && ordered([['center', whenOut(v.center)], ['scale', v.scale && ordered([['px', v.scale.px], ['unit', v.scale.unit], ['count', v.scale.count]])]], v.extra)],
@@ -644,16 +715,32 @@ export function docToJson(doc: Doc): Record<string, unknown> {
  * JSON as people read it: two-space indent, and any object or array that fits
  * in `width` columns on one line — `"start": { "y": -2517, "approx": true }`.
  */
-export function prettyJson(value: unknown, width = 100): string {
-  const inline = (v: unknown): string => {
-    if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
-    if (Array.isArray(v)) return `[${v.map(inline).join(', ')}]`;
-    const entries = Object.entries(v as Record<string, unknown>);
-    return entries.length ? `{ ${entries.map(([k, x]) => `${JSON.stringify(k)}: ${inline(x)}`).join(', ')} }` : '{}';
+function prettyJson(value: unknown, width = 100): string {
+  const scalar = (v: unknown): string => JSON.stringify(v) ?? 'null';
+  /** On one line, or null as soon as it outgrows `room`: the whole document is never written out flat only to be thrown away. */
+  const inline = (v: unknown, room: number): string | null => {
+    if (v === null || typeof v !== 'object') {
+      const text = scalar(v);
+      return text.length <= room ? text : null;
+    }
+    const array = Array.isArray(v);
+    const entries: [string | null, unknown][] = array ? v.map((x) => [null, x]) : Object.entries(v as Record<string, unknown>);
+    if (!entries.length) return room >= 2 ? (array ? '[]' : '{}') : null;
+    let out = array ? '[' : '{ ';
+    for (const [i, [k, x]] of entries.entries()) {
+      if (i) out += ', ';
+      if (k !== null) out += `${JSON.stringify(k)}: `;
+      const part = inline(x, room - out.length);
+      if (part === null) return null;
+      out += part;
+    }
+    out += array ? ']' : ' }';
+    return out.length <= room ? out : null;
   };
   const write = (v: unknown, indent: string, room: number): string => {
-    const flat = inline(v);
-    if (flat.length <= room || v === null || typeof v !== 'object') return flat;
+    if (v === null || typeof v !== 'object') return scalar(v);
+    const flat = inline(v, room);
+    if (flat !== null) return flat;
     const inner = `${indent}  `;
     if (Array.isArray(v)) return `[\n${v.map((x) => inner + write(x, inner, width - inner.length - 1)).join(',\n')}\n${indent}]`;
     const lines = Object.entries(v as Record<string, unknown>).map(([k, x]) => {

@@ -27,4 +27,10 @@ check('text and refs', [ids('apostles'), ids('acts')], [['pentecost'], ['peter']
 check('every word must match', ids('council creed'), ['nicaea']);
 check('a snippet', search(doc.items, 'spirit')[0].snippet, 'The Spirit comes upon the apostles.');
 check('nothing for nothing', ids('  '), []);
+{
+  // Accents typed as marks of their own go when the text is normalized: the snippet is still cut around the match.
+  const marked = 'e\u0301 '.repeat(150);
+  const [hit] = search([{ id: 'm', kind: 'event', start: { y: 1 }, title: 'M', text: `${marked}the apostles met` }], 'apostles');
+  check('a snippet where the text is longer than its normalized form', hit.snippet.includes('apostles'), true);
+}
 done('search');

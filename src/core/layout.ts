@@ -32,6 +32,8 @@ export interface CardInput {
   lane?: number;
   /** Stands centred over its dot (a round card), not `inset` to the right of its left edge. */
   centered?: boolean;
+  /** Moved by hand: px to the right of where it would stand. Its pointer runs slanted from the dot up to it. */
+  shift?: number;
 }
 
 export interface Placed {
@@ -106,10 +108,10 @@ export function layoutCards(cards: readonly CardInput[], options: CardOptions): 
   const rows = Array.from({ length: Math.max(1, rowCount) }, () => new Row());
   const placed = new Map<string, Placed>();
 
-  const fits = (x: number, left: number, width: number, row: number, span: number): boolean => {
+  /** Whether the card's own rows are free at `row`; the rows its pointer crosses below are the caller's to check. */
+  const fits = (left: number, width: number, row: number, span: number): boolean => {
     if (row + span > rows.length) return false;
     for (let r = row; r < row + span; r++) if (!rows[r]!.free(left - gap / 2, left + width + gap / 2)) return false;
-    for (let r = 0; r < row; r++) if (!rows[r]!.free(x - POINTER, x + POINTER)) return false;
     return true;
   };
   /** How much of the cards already placed a card at `row` would cover. */
@@ -118,9 +120,21 @@ export function layoutCards(cards: readonly CardInput[], options: CardOptions): 
     for (let r = row; r < Math.min(row + span, rows.length); r++) sum += rows[r]!.covered(left - gap / 2, left + width + gap / 2);
     return sum;
   };
-  const take = (x: number, left: number, width: number, row: number, span: number) => {
+  /** Where a pointer crosses row r below a card at `row`: straight up from the dot, or slanted towards a card moved by hand. */
+  const pointerAt = (x: number, shift: number, row: number, r: number): number => (shift ? x + (shift * (r + 0.5)) / row : x);
+  const pointerFree = (x: number, shift: number, row: number): boolean => {
+    for (let r = 0; r < row; r++) {
+      const at = pointerAt(x, shift, row, r);
+      if (!rows[r]!.free(at - POINTER, at + POINTER)) return false;
+    }
+    return true;
+  };
+  const take = (x: number, shift: number, left: number, width: number, row: number, span: number) => {
     for (let r = row; r < Math.min(row + span, rows.length); r++) rows[r]!.take(left - gap / 2, left + width + gap / 2);
-    for (let r = 0; r < row; r++) rows[r]!.take(x - POINTER, x + POINTER);
+    for (let r = 0; r < row; r++) {
+      const at = pointerAt(x, shift, row, r);
+      rows[r]!.take(at - POINTER, at + POINTER);
+    }
   };
 
   const sorted = [...cards].sort(
@@ -133,14 +147,30 @@ export function layoutCards(cards: readonly CardInput[], options: CardOptions): 
       continue;
     }
     const { width, rows: span } = card.full;
-    const left = card.centered ? card.x - width / 2 : card.x - inset;
+    const shift = card.shift ?? 0;
+    const left = (card.centered ? card.x - width / 2 : card.x - inset) + shift;
     // The highest row it may start at and still stand inside the strip (row 0 for one taller than it).
     const top = Math.max(0, rows.length - span);
     let row: number;
     if (card.lane !== undefined && card.lane >= 0) row = Math.min(card.lane, top);
     else {
       row = -1;
-      for (let r = 0; r <= top && row < 0; r++) if (fits(card.x, left, width, r, span)) row = r;
+      for (let r = 0; r <= top; r++) {
+        if (shift) {
+          // A slanted pointer crosses each row below at a place that depends on the card's row: every row is tried.
+          if (fits(left, width, r, span) && pointerFree(card.x, shift, r)) {
+            row = r;
+            break;
+          }
+          continue;
+        }
+        if (fits(left, width, r, span)) {
+          row = r;
+          break;
+        }
+        // The pointer runs down through every row below the card: once one of them is taken, no higher row will do.
+        if (!rows[r]!.free(card.x - POINTER, card.x + POINTER)) break;
+      }
       if (row < 0) {
         // No room: over the others, where it hides least of them.
         let least = Infinity;
@@ -150,7 +180,7 @@ export function layoutCards(cards: readonly CardInput[], options: CardOptions): 
         }
       }
     }
-    take(card.x, left, width, row, span);
+    take(card.x, shift, left, width, row, span);
     placed.set(card.id, { id: card.id, mode: 'full', row, rows: span, left, width });
   }
   return placed;
@@ -184,13 +214,15 @@ export function layoutBars(bars: readonly BarInput[], gap = 6): { row: Map<strin
     while (rows.length <= r) rows.push(new Row());
     return rows[r]!;
   };
+  let rowCount = 0;
   for (const bar of list) {
     const to = Math.max(bar.end, bar.visualEnd ?? bar.end) + gap;
     let r = bar.lane !== undefined && bar.lane >= 0 && rowAt(bar.lane).free(bar.start, to) ? bar.lane : -1;
     for (let i = 0; r < 0; i++) if (rowAt(i).free(bar.start, to)) r = i;
     rowAt(r).take(bar.start, to);
     row.set(bar.id, r);
+    rowCount = Math.max(rowCount, r + 1);
   }
   // A row left empty below a bar dragged down stays: the bar keeps the place it was put in.
-  return { row, rows: Math.max(0, ...list.map((bar) => row.get(bar.id)! + 1)) };
+  return { row, rows: rowCount };
 }

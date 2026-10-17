@@ -17,8 +17,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The whole suite, once: the page, the PWA (build/pages/: the worker, the manifest, offline, updates).
+  test:
+    uses: ./.github/workflows/test.yml
+
   build:
     name: Build the PWA
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -28,11 +33,7 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
       - run: npm run build
-      # Opens build/pages/ too: the service worker, the manifest, offline, updates.
-      - run: npm run test:browser
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

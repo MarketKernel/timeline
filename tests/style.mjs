@@ -1,7 +1,9 @@
 /** A file's paper: five tones in either theme from one colour, readable under the ink (style.ts). */
-import { checker, load } from '../tools/load.mjs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { checker, load, root } from '../tools/load.mjs';
 
-const { paperTones, hexToOklch, oklchToHex, STOCK_PAPER } = await load('core/style');
+const { paperTones, hexToOklch, oklchToHex, STOCK, STOCK_PAPER } = await load('core/style');
 const { check, done } = checker();
 
 const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -25,5 +27,25 @@ for (const color of ['#000000', '#2050a0', '#8a4a52']) {
 const dark = paperTones('#e7eef6', true);
 check('in the dark theme the paper is dark, in the same hue', [lightness(dark.paper) < 0.3, Math.abs(hexToOklch(dark.paper)[2] - hexToOklch('#e7eef6')[2]) < 10], [true, true]);
 check('white is grey in the dark', near(paperTones('#ffffff', true).paper, '#1c1c1c', 3), true);
+
+// The paper is written down three times: styles.css, STOCK, and the PWA's theme colours in build.mjs.
+{
+  const css = await readFile(join(root, 'src/app/styles.css'), 'utf8');
+  const build = await readFile(join(root, 'build.mjs'), 'utf8');
+  /** The custom properties of the first rule with this selector. */
+  const block = (selector) => {
+    const at = css.indexOf(`${selector} {`);
+    const body = css.slice(at, css.indexOf('}', at));
+    return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]));
+  };
+  const lightVars = block(':root');
+  const darkVars = block(":root[data-theme='dark']");
+  const fallback = block(':root:not([data-theme])');
+  const tones = (vars) => Object.fromEntries(Object.keys(STOCK.light).map((tone) => [tone, vars[tone]]));
+  check('styles.css has the stock light tones', tones(lightVars), STOCK.light);
+  check('…and the stock dark ones', tones(darkVars), STOCK.dark);
+  check('the dark theme before the script runs is the dark theme', fallback, darkVars);
+  check('the PWA’s theme colours are the stock papers', [`content="${STOCK.light.paper}" media="(prefers-color-scheme: light)"`, `content="${STOCK.dark.paper}" media="(prefers-color-scheme: dark)"`, `theme_color: '${STOCK.light.paper}'`, `background_color: '${STOCK.light.paper}'`].map((text) => build.includes(text)), [true, true, true, true]);
+}
 
 done('style');

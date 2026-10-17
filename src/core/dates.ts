@@ -39,8 +39,8 @@ export const isNow = (end: End | undefined): end is Now => !!end && (end as Now)
 export const YEAR_DAYS = 365.2425;
 
 /** Years the app accepts: far beyond any chronology, well inside a double's integers. */
-export const MIN_YEAR = -999_999;
-export const MAX_YEAR = 999_999;
+const MIN_YEAR = -999_999;
+const MAX_YEAR = 999_999;
 
 const mod = (a: number, b: number) => ((a % b) + b) % b;
 
@@ -88,10 +88,6 @@ export function dateOf(n: number): { y: number; m: number; d: number } {
 
 /** 0 = Monday … 6 = Sunday; 1 January AD 1 was a Monday. */
 export const weekday = (n: number): number => mod(Math.floor(n), 7);
-
-export type Precision = 'year' | 'month' | 'day';
-
-export const precisionOf = (w: When): Precision => (w.m === undefined ? 'year' : w.d === undefined ? 'month' : 'day');
 
 /** The first day of the span the date names. */
 export function startOf(w: When): number {
@@ -159,12 +155,21 @@ export function formatYear(y: number, lang: string = language()): string {
   return y < 1000 ? `AD${NB}${y}` : String(y);
 }
 
+/** Month names made: every tick of a month or a day on the ruler asks for one. */
+const shortMonths = new Map<string, string>();
+
 /** The short month name: alone (`Apr`, `апр.`) or after a day (`14 мая`, genitive in Russian). */
 export function monthName(m: number, lang: string = language(), withDay = false): string {
-  const date = new Date(Date.UTC(2001, m - 1, 15));
-  if (!withDay) return dateFormat({ month: 'short' }, lang).format(date);
-  const parts = dateFormat({ day: 'numeric', month: 'short' }, lang).formatToParts(date);
-  return parts.find((part) => part.type === 'month')?.value ?? String(m);
+  const key = `${lang}|${m}|${withDay}`;
+  let name = shortMonths.get(key);
+  if (name === undefined) {
+    const date = new Date(Date.UTC(2001, m - 1, 15));
+    name = withDay
+      ? (dateFormat({ day: 'numeric', month: 'short' }, lang).formatToParts(date).find((part) => part.type === 'month')?.value ?? String(m))
+      : dateFormat({ month: 'short' }, lang).format(date);
+    shortMonths.set(key, name);
+  }
+  return name;
 }
 
 const approxMark = (lang: string) => (lang === 'ru' ? `ок.${NB}` : `c.${NB}`);

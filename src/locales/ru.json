@@ -52,7 +52,6 @@
     "Deleted “{title}”": "«{title}» удалено",
     "Undo": "Отменить",
     "Move {title}": "Перемещение: {title}",
-    "Change {title}": "Изменение: {title}",
     "Move the boundary of {title}": "Сдвиг границы: {title}",
     "Reading pictures…": "Читаю картинки…",
     "Photo": "Фото",
@@ -118,7 +117,8 @@
     "Large: a turning point — a card even when the whole timeline is on the screen, with the large picture.": "Большая: поворотный момент — карточка видна, даже когда на экране вся хронология, с крупной картинкой.",
     "Huge: a turning point, the largest card, its gallery beside its picture.": "Огромная: поворотный момент, самая большая карточка, галерея рядом с картинкой.",
     "Size — the larger, the more it matters": "Размер — чем больше, тем важнее",
-    "“{title}” is {size} now: cards that size show from closer. Zoom in to see it.": "«{title}» теперь {size}: такие карточки видны ближе. Приблизьте, чтобы её увидеть."
+    "“{title}” is {size} now: cards that size show from closer. Zoom in to see it.": "«{title}» теперь {size}: такие карточки видны ближе. Приблизьте, чтобы её увидеть.",
+    "Keep the card where it was dragged to; its date stays as set above": "Оставить карточку там, куда её перетащили; дата остаётся такой, как задана выше"
   },
   "ui": {
     "Cancel": "Отмена",
@@ -204,7 +204,7 @@
     "or drop a {ext} file anywhere on this page": "или перетащите файл {ext} в любое место страницы",
     "Library": "Библиотека",
     "Recent": "Недавние",
-    "Timeline opens, edits and saves chronologies — {ext} files, one per story: the Bible, the history of a country, of science, of your own life. The page works from a disk and never touches the network; a file holds its own text and pictures, and renamed to {zip} it is a folder anyone can read.": "Timeline открывает, правит и сохраняет хронологии — файлы {ext}, по одному на историю: Библия, история страны, науки, вашей собственной жизни. Страница работает с диска и никогда не выходит в сеть; файл хранит свои тексты и картинки, а переименованный в {zip} — это папка, которую прочтёт кто угодно.",
+    "Timeline opens, edits and saves chronologies — {ext} files, one per story: world history, the history of a country, of science, of your own life. The page works from a disk and never touches the network; a file holds its own text and pictures, and renamed to {zip} it is a folder anyone can read.": "Timeline открывает, правит и сохраняет хронологии — файлы {ext}, по одному на историю: всемирная история, история страны, науки, вашей собственной жизни. Страница работает с диска и никогда не выходит в сеть; файл хранит свои тексты и картинки, а переименованный в {zip} — это папка, которую прочтёт кто угодно.",
     "Version": "Версия",
     "Settings": "Настройки",
     "Life": "Жизнь",
@@ -239,7 +239,8 @@
     "Export as a web page…": "Экспорт в веб-страницу…",
     "Print or save as PDF": "Печать или сохранение в PDF",
     "Settings": "Настройки",
-    "Close": "Закрыть"
+    "Close": "Закрыть",
+    "About Timeline": "О программе"
   },
   "update": {
     "Checking for a new version…": "Ищу новую версию…",
@@ -261,7 +262,7 @@
     "Save automatically": "Сохранять автоматически",
     "Every 30 seconds into the open file, when the browser allows it; otherwise a recovery copy is kept.": "Каждые 30 секунд в открытый файл, если браузер позволяет; иначе хранится копия для восстановления.",
     "Show the second ruler": "Показывать вторую линейку",
-    "Years from the file’s anchor: Anno Mundi, an age.": "Годы от точки отсчёта файла: от сотворения мира, возраст.",
+    "Years from the file’s anchor: since a founding, a first flight, a birth.": "Годы от точки отсчёта файла: от основания, от первого полёта, от рождения.",
     "Reduce motion": "Меньше движения",
     "Jump instead of gliding; no inertia.": "Перескакивать вместо плавного перехода; без инерции.",
     "Settings": "Настройки",
@@ -281,6 +282,9 @@
       "many": "{count} картинок",
       "other": "{count} картинки"
     }
+  },
+  "minimap": {
+    "Visible range": "Видимый отрезок"
   },
   "search": {
     "{count} found": {
@@ -421,8 +425,8 @@
   },
   "editbar": {
     "Click on the strip where the event happened.": "Щёлкните на ленте там, где случилось событие.",
-    "Drag cards and bars to change dates, up or down to change rows. Long-press to add an event.": "Тяните карточки и полосы, чтобы сменить даты, вверх и вниз — ряды. Долгое нажатие добавит событие.",
-    "Drag cards and bars sideways to change dates, up or down to change rows; a card’s corner to resize it. Drop photos on the strip.": "Тяните карточки и полосы вбок, чтобы сменить даты, вверх и вниз — ряды; угол карточки меняет её размер. Фото можно бросить на ленту.",
+    "Drag cards and bars to move them — their dates stay. Long-press to add an event.": "Тяните карточки и полосы, чтобы переставить их, — даты останутся прежними. Долгое нажатие добавляет событие.",
+    "Drag cards anywhere and bars up or down — their dates stay; a card’s corner resizes it. Drop photos on the strip.": "Карточки тяните куда угодно, полосы — вверх и вниз: даты останутся прежними; угол карточки меняет её размер. Бросьте фото на ленту.",
     "Undo: {what}": "Отменить: {what}",
     "Nothing to undo": "Нечего отменять",
     "Redo: {what}": "Повторить: {what}",
@@ -516,7 +520,14 @@
     "Choose music…": "Выбрать музыку…",
     "Optional. It plays quietly, in a loop, while the timeline is open; a reader can turn it off in Settings or with the speaker in the toolbar. The file goes in as it is.": "По желанию. Играет негромко, по кругу, пока хронология открыта; читатель может выключить её в «Настройках» или динамиком на панели. Файл кладётся как есть.",
     "What it is": "Что это",
-    "Music": "Музыка"
+    "Music": "Музыка",
+    "Name": "Имя",
+    "Website": "Сайт",
+    "Contact": "Контакт",
+    "E-mail, phone, …": "Почта, телефон, …",
+    "Author": "Автор",
+    "Optional: who made the timeline, and how to reach them.": "Необязательно: кто сделал хронологию и как связаться с автором.",
+    "The website must start with https:// or http://": "Адрес сайта должен начинаться с https:// или http://"
   },
   "eras": {
     "Eras": "Эпохи",
@@ -560,5 +571,10 @@
     "Exporting {name}…": "Экспортирую {name}…",
     "Exported {name}, {size}": "Готово: {name}, {size}",
     "Could not export: {error}": "Не удалось экспортировать: {error}"
+  },
+  "about": {
+    "About Timeline": "О программе Timeline",
+    "A chronology viewer and editor in one HTML file. It works from a disk and never touches the network.": "Просмотр и правка хронологий в одном HTML-файле. Работает с диска и никогда не обращается к сети.",
+    "Version": "Версия"
   }
 }

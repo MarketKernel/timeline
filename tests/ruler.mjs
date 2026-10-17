@@ -13,7 +13,7 @@ check('1 px = 1 year', pxPerDayOf({ px: 1, unit: 'year', count: 1 }), 1 / YEAR_D
 check('the presets, a pixel for a unit each, from a day to a million years', PRESETS.map(specText), ['1 px = 1 minute', '1 px = 1 hour', '1 px = 1 day', '1 px = 1 week', '1 px = 1 month', '1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 century', '1 px = 1,000 years', '1 px = 10,000 years', '1 px = 100,000 years', '1 px = 1 million years']);
 check('a pixel a minute is the finest zoom', pxPerDayOf(PRESETS[0]), MAX_PX_PER_DAY);
 const offered = (years) => presetsFor(years * YEAR_DAYS).map(specText).at(-1);
-check('only the presets that leave a chronology 100 px: a life, flight, the Bible, the Earth', [offered(40), offered(250), offered(6000), offered(4.5e9)], ['1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 million years']);
+check('only the presets that leave a chronology 100 px: a life, flight, six thousand years of history, the Earth', [offered(40), offered(250), offered(6000), offered(4.5e9)], ['1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 million years']);
 check('describe 1 px/20,000 years, 1 px/2.9 million years', [describeScale(1 / (YEAR_DAYS * 20000)), describeScale(1 / (YEAR_DAYS * 2.9e6))], [{ px: 1, unit: 'year', count: 20000 }, { px: 1, unit: 'year', count: 2.9e6 }]);
 check('describe 40 px/day, 24 px/day, 1440 px/day', [describeScale(40), describeScale(24), describeScale(1440)], [{ px: 1, unit: 'minute', count: 36 }, { px: 1, unit: 'hour', count: 1 }, { px: 1, unit: 'minute', count: 1 }]);
 check('describe 1 px/3 hours', describeScale(8), { px: 1, unit: 'hour', count: 3 });
@@ -98,10 +98,10 @@ check('ru boundary label', eraBoundaryLabel('ru'), `1${NB}до${NB}н.${NB}э. |
   check('days: every day is marked', days.minor.length + days.major.length, 5);
 }
 {
-  // Anno Mundi from Creation, 4174 BC, year 1 at the anchor.
+  // A count from a founding in 4174 BC, year 1 at the anchor.
   const anchor = { y: -4173 };
   const r = anchorRuler(dayOf(-4173, 1, 1) - 10, dayOf(-3173, 1, 1) + 10, 100 / (YEAR_DAYS * 100), anchor, 1);
-  check('AM labels', r.major.map((t) => t.label), ['1', '101', '201', '301', '401', '501', '601', '701', '801', '901', '1001']);
+  check('years counted from 1', r.major.map((t) => t.label), ['1', '101', '201', '301', '401', '501', '601', '701', '801', '901', '1001']);
   const age = anchorRuler(dayOf(1980, 5, 17), dayOf(1990, 5, 18), 100 / YEAR_DAYS, { y: 1980, m: 5, d: 17 }, 0);
   check('ages fall on birthdays', age.major.slice(0, 3).map((t) => t.day), [dayOf(1980, 5, 17), dayOf(1981, 5, 17), dayOf(1982, 5, 17)]);
 }

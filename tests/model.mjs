@@ -1,20 +1,20 @@
 /** timeline.json: validation with exact warnings, forward compatibility, deterministic output (Task §3, §11). */
 import { checker, load } from '../tools/load.mjs';
 
-const { parseDoc, serializeDoc, colorOf, rankOf, extentOf, usedImages, missingImages, ModelError, parseMarkdown, plainText, dayOf } = await load('core/model', 'core/markdown', 'core/dates');
+const { parseDoc, serializeDoc, colorOf, rankOf, extentOf, usedImages, missingImages, ModelError, ID_PATTERN, parseMarkdown, plainText, dayOf, compareItems, inTimeOrder } = await load('core/model', 'core/markdown', 'core/dates');
 const { check, done } = checker();
 
 const good = {
   format: 'timeline',
   version: 1,
   lang: 'ru',
-  meta: { id: 'bible', kind: 'history', created: '2026-10-13', generator: 'timeline 0.1.0' },
-  title: 'Библия',
-  images: { '3f9a00c2aa00c2aa': { ext: 'webp', w: 1280, h: 853, caption: 'Ной', credit: { author: 'A', license: 'PD', url: 'https://commons.wikimedia.org/x' } } },
+  meta: { id: 'ancient', kind: 'history', created: '2026-10-13', generator: 'timeline 0.1.0' },
+  title: 'Древний мир',
+  images: { '3f9a00c2aa00c2aa': { ext: 'webp', w: 1280, h: 853, caption: 'Вулкан', credit: { author: 'A', license: 'PD', url: 'https://commons.wikimedia.org/x' } } },
   items: [
-    { id: 'david', kind: 'period', start: { y: -1009 }, end: { y: -969 }, title: 'Царствование Давида', color: '#B07D3C' },
-    { id: 'flood', kind: 'event', start: { y: -2517, approx: true, spread: 100 }, title: 'Потоп', refs: 'Быт 6–9', importance: 1, image: '3f9a00c2aa00c2aa' },
-    { id: 'church', kind: 'era', start: { y: 30 }, end: { now: true }, title: 'Век Церкви', color: '#7b5e8a' },
+    { id: 'reign', kind: 'period', start: { y: -1009 }, end: { y: -969 }, title: 'Правление фараона', color: '#B07D3C' },
+    { id: 'eruption', kind: 'event', start: { y: -2517, approx: true, spread: 100 }, title: 'Извержение', refs: 'Геродот, II', importance: 1, image: '3f9a00c2aa00c2aa' },
+    { id: 'our-era', kind: 'era', start: { y: 30 }, end: { now: true }, title: 'Наша эра', color: '#7b5e8a' },
   ],
   view: { center: { y: -2000 }, scale: { px: 1, unit: 'year', count: 1 } },
 };
@@ -23,10 +23,10 @@ const good = {
   const { doc, warnings } = parseDoc(structuredClone(good));
   check('a good file has no warnings', warnings, []);
   check('colours are lower-cased', [doc.items[0].color, doc.items[2].color], ['#b07d3c', '#7b5e8a']);
-  check('one language, plain strings', [doc.lang, doc.title, doc.items[2].title], ['ru', 'Библия', 'Век Церкви']);
+  check('one language, plain strings', [doc.lang, doc.title, doc.items[2].title], ['ru', 'Древний мир', 'Наша эра']);
   check('open end', doc.items[2].end, { now: true });
   const text = serializeDoc(doc);
-  check('items are written in date order', JSON.parse(text).items.map((i) => i.id), ['flood', 'david', 'church']);
+  check('items are written in date order', JSON.parse(text).items.map((i) => i.id), ['eruption', 'reign', 'our-era']);
   check('serializing is stable', serializeDoc(parseDoc(JSON.parse(text)).doc), text);
   check('short objects stay on one line', text.includes('"start": { "y": -2517, "approx": true, "spread": 100 }'), true);
   check('keys in a fixed order', Object.keys(JSON.parse(text)), ['format', 'version', 'lang', 'meta', 'title', 'images', 'items', 'view']);
@@ -45,8 +45,8 @@ const good = {
   const out = JSON.parse(serializeDoc(doc));
   check('style keys in a fixed order, unknown ones after', Object.keys(out.style), ['paper', 'texture', 'color', 'font', 'ink']);
   check('style sits between anchor and images', Object.keys(out).slice(-4), ['style', 'images', 'items', 'view']);
-  check('an item without a colour takes the file’s', [colorOf(doc.items.find((i) => i.id === 'flood'), doc), colorOf(doc.items.find((i) => i.id === 'flood'))], ['#aabbcc', '#8c8176']);
-  check('an item’s own colour wins', colorOf(doc.items.find((i) => i.id === 'david'), doc), '#b07d3c');
+  check('an item without a colour takes the file’s', [colorOf(doc.items.find((i) => i.id === 'eruption'), doc), colorOf(doc.items.find((i) => i.id === 'eruption'))], ['#aabbcc', '#8c8176']);
+  check('an item’s own colour wins', colorOf(doc.items.find((i) => i.id === 'reign'), doc), '#b07d3c');
   const bad = parseDoc({ ...structuredClone(good), style: { paper: 'blue', texture: 'velvet', font: 'comic' } });
   check('bad style fields are dropped one by one', bad.warnings.map((w) => w.path), ['style.paper', 'style.texture', 'style.font']);
   check('an empty style is not written', 'style' in JSON.parse(serializeDoc(bad.doc)), false);
@@ -98,7 +98,7 @@ const good = {
   future.layers = [{ id: 'egypt' }];
   future.meta.signature = 'abc';
   future.items[0].sources = ['Thiele'];
-  future.items[1].arcs = [{ to: 'david' }];
+  future.items[1].arcs = [{ to: 'reign' }];
   future.images['3f9a00c2aa00c2aa'].focus = { x: 0.3, y: 0.4 };
   future.view.layout = 'vertical';
   const { doc, warnings } = parseDoc(future);
@@ -106,7 +106,7 @@ const good = {
   const out = JSON.parse(serializeDoc(doc));
   check('unknown top-level field kept', out.layers, [{ id: 'egypt' }]);
   check('unknown meta field kept', out.meta.signature, 'abc');
-  check('unknown item fields kept', [out.items.find((i) => i.id === 'david').sources, out.items.find((i) => i.id === 'flood').arcs], [['Thiele'], [{ to: 'david' }]]);
+  check('unknown item fields kept', [out.items.find((i) => i.id === 'reign').sources, out.items.find((i) => i.id === 'eruption').arcs], [['Thiele'], [{ to: 'reign' }]]);
   check('unknown image and view fields kept', [out.images['3f9a00c2aa00c2aa'].focus, out.view.layout], [{ x: 0.3, y: 0.4 }, 'vertical']);
   check('the version is kept', out.version, 3);
 }
@@ -178,7 +178,7 @@ const good = {
     categories: [{ id: 'kings', title: 'Kings', color: '#ABC', glyph: 'crown' }, { id: 'plain', title: 'Plain' }],
     tracks: [{ id: 'judah', title: 'Judah' }],
     items: [
-      { id: 'david', kind: 'period', start: { y: -1009 }, end: { y: -969 }, title: 'David', category: 'kings', track: 'judah' },
+      { id: 'reign', kind: 'period', start: { y: -1009 }, end: { y: -969 }, title: 'David', category: 'kings', track: 'judah' },
       { id: 'own', kind: 'event', start: { y: -1000 }, title: 'Own', category: 'kings', color: '#123456' },
       { id: 'grey', kind: 'event', start: { y: -990 }, title: 'Grey', category: 'plain' },
     ],
@@ -202,6 +202,7 @@ const good = {
 
 {
   // Galleries and card sizes.
+  /** @type {any} */
   const json = structuredClone(good);
   json.images['4b4b4b4b4b4b4b4b'] = { ext: 'webp', w: 800, h: 600 };
   json.images['5c5c5c5c5c5c5c5c'] = { ext: 'png', w: 800, h: 600 };
@@ -211,21 +212,21 @@ const good = {
   json.items.push({ id: 'lost', kind: 'event', start: { y: 1 }, title: 'Lost', image: 'dead1111dead1111', gallery: ['5c5c5c5c5c5c5c5c'], size: 'normal' });
   const { doc, warnings } = parseDoc(json);
   check('gallery warnings', warnings.map((w) => `${w.code} ${w.path}`), ['field-dropped items[0].size', 'image-missing items[1].gallery[2]', 'image-missing items[3].image']);
-  const flood = doc.items.find((i) => i.id === 'flood');
-  check('a gallery drops repeats and the card picture', flood.gallery, ['4b4b4b4b4b4b4b4b', '5c5c5c5c5c5c5c5c']);
-  check('a size on an event is kept', flood.size, 'huge');
+  const eruption = doc.items.find((i) => i.id === 'eruption');
+  check('a gallery drops repeats and the card picture', eruption.gallery, ['4b4b4b4b4b4b4b4b', '5c5c5c5c5c5c5c5c']);
+  check('a size on an event is kept', eruption.size, 'huge');
   const lost = doc.items.find((i) => i.id === 'lost');
   check('a gallery without its first picture moves the next one onto the card', [lost.image, lost.gallery, lost.size], ['5c5c5c5c5c5c5c5c', undefined, undefined]);
   check('gallery pictures are used', [...usedImages(doc)].sort(), ['3f9a00c2aa00c2aa', '4b4b4b4b4b4b4b4b', '5c5c5c5c5c5c5c5c']);
   const text = serializeDoc(doc);
-  check('…written after the picture, before the lane', Object.keys(JSON.parse(text).items.find((i) => i.id === 'flood')), ['id', 'kind', 'start', 'title', 'refs', 'image', 'gallery', 'size']);
+  check('…written after the picture, before the lane', Object.keys(JSON.parse(text).items.find((i) => i.id === 'eruption')), ['id', 'kind', 'start', 'title', 'refs', 'image', 'gallery', 'size']);
   check('…and round-trip', serializeDoc(parseDoc(JSON.parse(text)).doc), text);
 }
 
-for (const [name, json, expected] of [
+for (const [name, json, expected] of /** @type {[string, unknown, string][]} */ ([
   ['not an object', [], 'no object'],
   ['another format', { format: 'kml' }, 'not "timeline"'],
-]) {
+])) {
   let message = '';
   try {
     parseDoc(json);
@@ -237,7 +238,7 @@ for (const [name, json, expected] of [
 
 {
   // Markdown-lite.
-  const md = parseMarkdown('In the *beginning*, **God**.\nSee [Genesis](https://bible.example/gen) or https://x.org/a.\n\n[bad](javascript:alert) _end_');
+  const md = parseMarkdown('In the *beginning*, **the Moon**.\nSee [Apollo](https://moon.example/apollo) or https://x.org/a.\n\n[bad](javascript:alert) _end_');
   check('two paragraphs', md.length, 2);
   check('inline kinds', md[0].map((n) => n.kind), ['text', 'em', 'text', 'strong', 'text', 'br', 'text', 'link', 'text', 'link', 'text']);
   check('an unsafe link stays text', md[1][0], { kind: 'text', text: '[bad](javascript:alert)' });
@@ -248,6 +249,8 @@ for (const [name, json, expected] of [
   // "New timeline": an ASCII id from any title.
   const { newDocId } = await load('core/templates');
   check('a new file’s id is an ASCII slug of its title', [newDocId('The History of the USA'), newDocId('Анна: жизнь'), newDocId('???')], ['the-history-of-the-usa', 'anna-zhizn', 'timeline']);
+  check('й and ё are spelled as themselves, not as и and е', [newDocId('Йошкар-Ола'), newDocId('Ёлка')], ['yoshkar-ola', 'elka']);
+  check('a long Cyrillic title still makes an id a file may have', ID_PATTERN.test(newDocId('щ'.repeat(40))) && newDocId('щ'.repeat(40)).length <= 40, true);
 }
 
 {
@@ -264,6 +267,48 @@ for (const [name, json, expected] of [
   const empty = parseDoc({ ...base, items: [], start: { y: 1990, m: 5, d: 17 }, end: { now: true } }).doc;
   check('an empty file with dates spans them', extentOf(empty, now), [dayOf(1990, 5, 17), dayOf(2026, 10, 14)]);
   check('bad dates are dropped', parseDoc({ ...base, start: 'soon', end: { y: 'x' } }).warnings.map((w) => w.path), ['start', 'end']);
+}
+
+{
+  // Who made it: each part optional, kept in the file after the sources, a website only as http(s).
+  const base = { format: 'timeline', version: 1, meta: { id: 'x', kind: 'history' }, title: 'X', sources: 'S', items: [] };
+  const { doc, warnings } = parseDoc({ ...base, author: { contact: 'anna@example.org', name: 'Anna', url: 'https://anna.example.org', pronouns: 'she' } });
+  check('an author is read', [warnings, doc.author], [[], { name: 'Anna', url: 'https://anna.example.org', contact: 'anna@example.org', extra: { pronouns: 'she' } }]);
+  const written = JSON.parse(serializeDoc(doc));
+  check('…written after the sources, in a fixed order, what it did not know kept', [Object.keys(written).slice(5, 7), Object.keys(written.author)], [['sources', 'author'], ['name', 'url', 'contact', 'pronouns']]);
+  const odd = parseDoc({ ...base, author: { name: '', url: 'javascript:alert(1)', contact: 'tel. 123' } });
+  check('an empty name and a website that is not one are left out', [odd.doc.author, odd.warnings.map((w) => w.path)], [{ contact: 'tel. 123' }, ['author.name', 'author.url']]);
+  check('an author that is not an object is left out', parseDoc({ ...base, author: 'Anna' }).warnings.map((w) => w.path), ['author']);
+  check('an author with nothing in it is no author', parseDoc({ ...base, author: {} }).doc.author, undefined);
+}
+
+{
+  // A card moved by hand: px from where it would stand, an event's only; its date untouched.
+  const base = { format: 'timeline', version: 1, meta: { id: 'x', kind: 'history' }, title: 'X' };
+  const items = [
+    { id: 'e', kind: 'event', start: { y: 1900 }, title: 'E', lane: 2, shift: -140 },
+    { id: 'f', kind: 'event', start: { y: 1901 }, title: 'F', shift: 1.5 },
+    { id: 'g', kind: 'event', start: { y: 1902 }, title: 'G', shift: 999999 },
+    { id: 'p', kind: 'period', start: { y: 1900 }, end: { y: 1910 }, title: 'P', shift: 20 },
+  ];
+  const { doc, warnings } = parseDoc({ ...base, items });
+  check('a card’s shift is read for an event', [doc.items[0].shift, doc.items[0].start], [-140, { y: 1900 }]);
+  check('…not a fraction, not a world away, not for a period', warnings.map((w) => w.path), ['items[1].shift', 'items[2].shift', 'items[3].shift']);
+  check('…and written after the row', Object.keys(JSON.parse(serializeDoc(doc)).items.find((i) => i.id === 'e')).slice(-2), ['lane', 'shift']);
+}
+
+{
+  // Time order with each day worked out once is the comparator's order: dates of every precision, kinds and ids tied.
+  let seed = 9;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const kinds = ['event', 'period', 'era'];
+  const items = Array.from({ length: 300 }, (_, i) => {
+    const y = 1900 + Math.floor(random() * 20);
+    const start = random() < 0.3 ? { y } : random() < 0.5 ? { y, m: 1 + Math.floor(random() * 12) } : { y, m: 3, d: 1 + Math.floor(random() * 28) };
+    const kind = kinds[Math.floor(random() * 3)];
+    return { id: `x${Math.floor(random() * 50)}-${i}`, kind, start, title: 'T', ...(kind === 'event' ? {} : { end: { y: y + 1 } }) };
+  });
+  check('inTimeOrder sorts as compareItems does', inTimeOrder(items).map((i) => i.id), [...items].sort(compareItems).map((i) => i.id));
 }
 
 done('model');

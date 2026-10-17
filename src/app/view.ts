@@ -23,7 +23,7 @@ import { colorOf, extentOf, picturesOf, rankOf, spanOf, type CardSize, type Doc,
 import { anchorRuler, ruler, type Tick } from '../core/ruler';
 import { hexToOklch } from '../core/style';
 import { clamp, clampCenter, dayAt, fitView, scaleBar, xOf, zoomAt, zoomLimits, type View } from '../core/scale';
-import { h } from './dom';
+import { h, icon, prefersReducedMotion, trackPointer } from './dom';
 import { lineCount, textWidth } from './measure';
 
 export interface ImageSource {
@@ -99,16 +99,13 @@ const FONT_LINE = '400 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-s
 const FONT_BAR = '500 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /** Two pictures, one behind the other: the mark of a gallery. */
-export function galleryIcon(): SVGSVGElement {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const d of ['M8 7V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H17', 'M5.5 8h9A1.5 1.5 0 0 1 16 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 4 18.5v-9A1.5 1.5 0 0 1 5.5 8z']) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    svg.append(path);
-  }
-  return svg;
+export const galleryIcon = (): SVGSVGElement =>
+  icon('M8 7V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H17', 'M5.5 8h9A1.5 1.5 0 0 1 16 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 4 18.5v-9A1.5 1.5 0 0 1 5.5 8z');
+
+/** A card's pointer, from its dot up `height` px to the card: straight, or leaning to a card moved by hand `shift` px — the date stays where it is. */
+function lean(pointer: HTMLElement, shift: number, height: number): void {
+  pointer.style.height = `${shift ? Math.hypot(shift, height) : height}px`;
+  pointer.style.transform = shift ? `rotate(${Math.atan2(shift, height)}rad)` : '';
 }
 
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
@@ -227,8 +224,10 @@ export class Strip {
       .map((item) => {
         const size = item.size ?? 'normal';
         const day = midOf(item.start);
-        if (item.shape === 'round') return { day, left: discOf(size) / 2, right: discOf(size) / 2 };
-        return { day, left: CARD_INSET, right: CARD_SIZES[size].width - CARD_INSET };
+        // A card moved by hand reaches as far as it stands from its dot.
+        const shift = item.shift ?? 0;
+        if (item.shape === 'round') return { day, left: discOf(size) / 2 - shift, right: discOf(size) / 2 + shift };
+        return { day, left: CARD_INSET - shift, right: CARD_SIZES[size].width - CARD_INSET + shift };
       });
     this.limits = zoomLimits(this.extent[1] - this.extent[0]);
     this.scheduleBuild();
@@ -240,6 +239,9 @@ export class Strip {
    * the last event needs its whole width after it.
    */
   margins(pxPerDay: number): [number, number] {
+    // Asked at every frame of a pan, at the one zoom: worked out once for it.
+    const cached = this.marginsAt;
+    if (cached && cached.version === this.version && cached.px === pxPerDay) return [...cached.value];
     const [lo, hi] = this.extent;
     let before = START_MARGIN;
     let after = START_MARGIN;
@@ -247,17 +249,25 @@ export class Strip {
       before = Math.max(before, r.left + CARD_ROOM - (r.day - lo) * pxPerDay);
       after = Math.max(after, r.right + CARD_ROOM - (hi - r.day) * pxPerDay);
     }
+    this.marginsAt = { version: this.version, px: pxPerDay, value: [before, after] };
     return [before, after];
   }
+  private marginsAt: { version: number; px: number; value: [number, number] } | null = null;
 
   /** The view that shows the whole extent, with room for the cards at both ends. */
   private fitted(): View {
-    const [lo, hi] = this.extent;
-    // The margins depend on the zoom, the zoom on the margins: twice is close enough.
-    let view = fitView(lo, hi, this.view.width, this.limits, [START_MARGIN, START_MARGIN]);
-    for (let i = 0; i < 2; i++) view = fitView(lo, hi, this.view.width, this.limits, this.margins(view.pxPerDay));
-    return view;
+    // Every build asks (maxRank): it changes only with the document and the width.
+    const key = `${this.version}|${this.view.width}`;
+    if (this.fittedView?.key !== key) {
+      const [lo, hi] = this.extent;
+      // The margins depend on the zoom, the zoom on the margins: twice is close enough.
+      let view = fitView(lo, hi, this.view.width, this.limits, [START_MARGIN, START_MARGIN]);
+      for (let i = 0; i < 2; i++) view = fitView(lo, hi, this.view.width, this.limits, this.margins(view.pxPerDay));
+      this.fittedView = { key, view };
+    }
+    return { ...this.fittedView.view };
   }
+  private fittedView: { key: string; view: View } | null = null;
 
   /** The zoom that shows the whole extent. */
   get fitPx(): number {
@@ -292,13 +302,21 @@ export class Strip {
   }
 
   private settleTimer = 0;
+  private settling = false;
   /** Rebuilds with a fresh layout once the view rests. */
   private settle(): void {
     clearTimeout(this.settleTimer);
+    this.settling = true;
     this.settleTimer = window.setTimeout(() => {
+      this.settling = false;
       if (this.builtCenter !== this.view.center || this.builtPx !== this.view.pxPerDay) this.scheduleBuild();
       this.handlers.settled();
     }, 140);
+  }
+
+  /** At rest: no animation, no inertia, no build waiting — what the browser tests wait for instead of a fixed pause. */
+  get idle(): boolean {
+    return !this.animation && !this.inertia && !this.needsBuild && !this.settling;
   }
 
   fit(animate = true): void {
@@ -332,7 +350,7 @@ export class Strip {
   /** Moves to `target`, eased over 300 ms unless motion is reduced. */
   go(target: View, animate = true): void {
     this.inertia = null;
-    if (!animate || this.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!animate || this.reduceMotion || prefersReducedMotion()) {
       this.animation = null;
       this.setView(target);
       return;
@@ -447,7 +465,8 @@ export class Strip {
    * Building the layers
    * ---------------------------------------------------------------- */
 
-  private visibleItem(item: Item): boolean {
+  /** Whether the strip shows an item at all: small events go when Settings hides them. */
+  visibleItem(item: Item): boolean {
     return !(item.kind === 'event' && rankOf(item) === 3 && !this.showMinor);
   }
 
@@ -469,6 +488,7 @@ export class Strip {
     const screen = view.width / view.pxPerDay;
     const from = view.center - screen * 1.5;
     const to = view.center + screen * 1.5;
+    this.builtRange = [from, to];
     const today = todayDay();
     const lang = language();
 
@@ -484,6 +504,10 @@ export class Strip {
     this.root.dataset.built = String(++this.builds);
   }
   private builds = 0;
+  /** The days the last build covered: restyle() redraws the rulers over the same stretch. */
+  private builtRange: [number, number] = [0, 0];
+  /** The second ruler's temporary anchor the rulers were last drawn for. */
+  private builtAnchor: Strip['tempAnchor'] = null;
 
   private keep<T extends HTMLElement>(map: Map<string, T>, alive: Set<string>, release?: (id: string, el: T) => void): void {
     for (const [id, el] of map) {
@@ -626,7 +650,6 @@ export class Strip {
     const inputs: CardInput[] = [];
     for (const item of inRange) {
       const title = item.title;
-      const date = formatWhen(item.start, lang);
       const info = item.image ? doc.images[item.image] : undefined;
       // Two lines at most are shown: the first few hundred characters decide how many.
       const line = item.text ? plainText(item.text).slice(0, 240) : '';
@@ -656,6 +679,7 @@ export class Strip {
         full: full(item.size ?? 'normal'),
         lane: item.lane,
         centered: round,
+        shift: item.shift,
       });
     }
     const placed = layoutCards(inputs, { rows, gap: 12, inset: CARD_INSET, maxRank: this.maxRank() });
@@ -713,7 +737,7 @@ export class Strip {
       entry.card.style.width = `${p.width}px`;
       entry.card.style.height = `${p.rows * ROW - ROW_GAP}px`;
       entry.pointer.style.left = `${x}px`;
-      entry.pointer.style.height = `${bottom}px`;
+      lean(entry.pointer, item.shift ?? 0, bottom);
       entry.pointer.className = this.classes(byId.get(item.id)!, 'pointer', today);
     }
     // Cards may lie over each other: a later event over an earlier one (hover and selection lift any to the top).
@@ -844,12 +868,13 @@ export class Strip {
     this.rulerContext.hidden = !context;
 
     const temp = this.tempAnchor;
+    this.builtAnchor = temp;
     const anchor = temp?.at ?? this.anchorDate(doc);
     this.anchorBox.hidden = !anchor || !this.secondRuler;
     if (anchor && this.secondRuler) {
-      this.anchorLayer.replaceChildren(...ticks(anchorRuler(from, to, px, anchor, temp ? 0 : (doc.anchor?.base ?? 0))));
-      const name = temp?.label ?? (doc.anchor?.label || t('strip', 'Years'));
       const r = anchorRuler(from, to, px, anchor, temp ? 0 : (doc.anchor?.base ?? 0));
+      this.anchorLayer.replaceChildren(...ticks(r));
+      const name = temp?.label ?? (doc.anchor?.label || t('strip', 'Years'));
       // When no year boundary is on screen, say which year it is.
       const visible = r.major.some((tick) => tick.day >= this.dayAt(0) && tick.day <= this.dayAt(this.view.width));
       const startDay = dayOf(anchor.y, anchor.m ?? 1, anchor.d ?? 1);
@@ -874,9 +899,29 @@ export class Strip {
     return item ? item.start : null;
   }
 
-  /** Redraws selection and highlight classes without a new layout. */
+  /** Builds again with a fresh layout: a setting changed, or a drag let go of what it moved. */
   refresh(): void {
     this.scheduleBuild();
+  }
+
+  /**
+   * The selection or the search's highlight changed: only the classes that
+   * show them change, and the second ruler when a period now counts the years
+   * — no new layout. A build already on its way applies them itself.
+   */
+  restyle(): void {
+    const doc = this.doc;
+    if (!doc || this.needsBuild || !this.builtWidth) return;
+    const mark = (el: HTMLElement, id: string) => {
+      el.classList.toggle('selected', id === this.selected);
+      el.classList.toggle('faded', !!this.highlight && !this.highlight.has(id));
+    };
+    for (const [id, entry] of this.cardEls) {
+      mark(entry.card, id);
+      mark(entry.pointer, id);
+    }
+    for (const map of [this.dotEls, this.barEls, this.eraEls]) for (const [id, el] of map) mark(el, id);
+    if (this.tempAnchor !== this.builtAnchor) this.buildRulers(doc, ...this.builtRange, todayDay(), language());
   }
 
   /** The element that shows an item now, if any: a card, a dot, a bar or an era. */
@@ -886,6 +931,12 @@ export class Strip {
 
   /** Pixels on the right the details panel covers; reveal() keeps items out from under it. */
   coveredRight = 0;
+
+  /** While a card is dragged: its pointer leans from the dot to where the card is being put, in row `row`. */
+  leanPointer(id: string, shift: number, row: number): void {
+    const pointer = this.cardEls.get(id)?.pointer;
+    if (pointer) lean(pointer, shift, AXIS_PAD + row * ROW);
+  }
 
   /** Brings an item on screen (centred in the free part, at a zoom where it reads). */
   reveal(item: Item, animate = true): void {
@@ -914,7 +965,7 @@ export class Strip {
     return true;
   }
 
-  /** The item nearest to a day, within 8 px, for naming the ends: "Exodus → Temple". */
+  /** The item nearest to a day, within 8 px, for naming the ends: "First flight → Moon landing". */
   private itemNear(day: number): Item | null {
     let best: Item | null = null;
     let distance = 8 / this.view.pxPerDay;
@@ -954,13 +1005,7 @@ export class Strip {
       label.textContent = names + formatDuration(b.day - a.day);
     };
     update(event.clientX);
-    const move = (e: PointerEvent) => update(e.clientX);
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    trackPointer(window, (e) => update(e.clientX), () => undefined);
   }
 
   /* ---------------------------------------------------------------- *

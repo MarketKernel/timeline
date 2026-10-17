@@ -5,14 +5,14 @@
  */
 
 import { t } from '../core/i18n';
-import { compareItems, itemDay, rankOf, type Item } from '../core/model';
-import { byId } from './dom';
+import { inTimeOrder, itemDay, type Item } from '../core/model';
+import { byId, isNarrow, isTyping } from './dom';
 import { Details } from './details';
 import { SearchBar } from './search';
 import { app, emit, on } from './state';
 
-export let details: Details;
-export let searchBar: SearchBar;
+let details: Details;
+let searchBar: SearchBar;
 
 const item = (id: string | null): Item | undefined => (id ? app.session?.doc.items.find((i) => i.id === id) : undefined);
 
@@ -22,11 +22,11 @@ export function select(id: string | null, focusPanel = false, reveal = true): vo
   const found = item(id);
   strip.selected = found?.id ?? null;
   strip.tempAnchor = found?.kind === 'period' ? { at: found.start, label: t('strip', 'Age: {name}', { name: found.title }) } : null;
-  strip.refresh();
+  strip.restyle();
   if (found && app.session) {
     details.show(app.session.doc, found, app.session.store, focusPanel);
     // On a desktop the panel stands over the strip's right side: keep the item clear of it.
-    const wide = window.innerWidth > 720;
+    const wide = !isNarrow();
     strip.coveredRight = wide ? details.panel.offsetWidth + 16 : 0;
     if (wide && reveal) strip.reveal(found);
   } else {
@@ -35,14 +35,13 @@ export function select(id: string | null, focusPanel = false, reveal = true): vo
   }
 }
 
+/** The document's items in time order, sorted once a change: the panel's previous and next, and Tab, walk it. */
+let ordered: Item[] | null = null;
+const inOrder = (): Item[] => (ordered ??= inTimeOrder(app.session?.doc.items ?? []));
+
 /** Items a reader can reach: what the strip shows, in time order. */
 function reachable(): Item[] {
-  const doc = app.session?.doc;
-  if (!doc) return [];
-  const strip = app.strip;
-  return doc.items
-    .filter((i) => !(i.kind === 'event' && rankOf(i) === 3 && !strip.showMinor))
-    .sort(compareItems);
+  return inOrder().filter((i) => app.strip.visibleItem(i));
 }
 
 /** Puts keyboard focus on an item, bringing it onto the strip first. */
@@ -52,11 +51,6 @@ export function focusItem(target: Item): void {
   strip.build();
   const el = strip.elementOf(target.id);
   el?.focus({ preventScroll: true });
-}
-
-function typing(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -72,7 +66,7 @@ function onKey(event: KeyboardEvent): void {
     }
     return;
   }
-  if (typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.key === '/') {
     event.preventDefault();
     searchBar.show();
@@ -109,9 +103,10 @@ export function setupReading(): void {
       select(id);
     },
     edit: (id) => emit('open', id),
-    anchor: (id) => window.dispatchEvent(new CustomEvent('timeline:anchor', { detail: id })),
+    anchor: (id) => emit('anchor', id),
     close: () => select(null),
     editing: () => app.editing,
+    ordered: inOrder,
   });
   searchBar = new SearchBar({
     items: () => app.session?.doc.items ?? [],
@@ -124,7 +119,7 @@ export function setupReading(): void {
     open: (id) => select(id, true),
     highlight: (ids) => {
       app.strip.highlight = ids;
-      app.strip.refresh();
+      app.strip.restyle();
     },
   });
   on('select', (id) => select(id));
@@ -132,10 +127,13 @@ export function setupReading(): void {
     if (!app.editing) select(id, true);
   });
   on('closed', () => {
+    ordered = null;
     details.hide();
     searchBar.close();
   });
+  on('opened', () => (ordered = null));
   on('changed', () => {
+    ordered = null;
     // An edit can change or remove what the panel shows.
     const id = details.current;
     if (!id) return;

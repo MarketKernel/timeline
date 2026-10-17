@@ -30,7 +30,7 @@ export interface Step {
 /** 1, 2, 5 × 10ⁿ years, up to the billions a pixel a million years needs (the age of the Earth in three screens). */
 const YEAR_MULTIPLES = Array.from({ length: 10 }, (_, e) => [1, 2, 5].map((m) => m * 10 ** e)).flat();
 
-export const STEPS: readonly Step[] = [
+const STEPS: readonly Step[] = [
   { kind: 'day', n: 1, minDays: 1 },
   // At the finest zoom a day is 40 px: labels go every other day, each day still marked.
   { kind: 'day', n: 2, minDays: 2 },
@@ -53,7 +53,7 @@ export function majorStep(pxPerDay: number, minGap = 80): Step {
 }
 
 /** The finest step that divides `major` and still leaves `minGap` px between marks; null if none. */
-export function minorStep(major: Step, pxPerDay: number, minGap = 6): Step | null {
+function minorStep(major: Step, pxPerDay: number, minGap = 6): Step | null {
   const divides = (step: Step): boolean => {
     if (step === major) return false;
     if (major.kind === 'year') return (step.kind === 'year' && major.n % step.n === 0) || (major.n === 1 && step.kind === 'month');
@@ -99,7 +99,8 @@ function monthTicks(from: number, to: number, n: number, lang: string, labelled:
   for (;;) {
     const day = dayOf(y, m, 1);
     if (day > to) break;
-    if (day >= from - 400) ticks.push({ day, label: labelled ? (m === 1 ? formatYear(y, lang) : monthName(m, lang)) : undefined });
+    // The first tick is at most half a year before `from`: the step's own month, counted back from it.
+    ticks.push({ day, label: labelled ? (m === 1 ? formatYear(y, lang) : monthName(m, lang)) : undefined });
     m += n;
     if (m > 12) {
       m -= 12;
@@ -165,16 +166,15 @@ export function ruler(from: number, to: number, pxPerDay: number, lang: string =
 }
 
 /**
- * The second ruler: years counted from an anchor — Anno Mundi, years since
- * the Exodus, one's age. Year n starts on the anchor's n-th anniversary;
+ * The second ruler: years counted from an anchor — a city's years since its
+ * founding, the years since the first flight, one's age. Year n starts on the anchor's n-th anniversary;
  * `base` is what the anchor's own year is called (1 for AM, 0 for an age).
  */
 export function anchorRuler(from: number, to: number, pxPerDay: number, anchor: { y: number; m?: number; d?: number }, base = 0, minGap = 80): Ruler {
-  const multiples = YEAR_MULTIPLES;
-  const k = multiples.find((n) => n * 365 * pxPerDay >= minGap) ?? multiples[multiples.length - 1]!;
-  const fine = multiples.filter((n) => n < k && k % n === 0 && n * 365 * pxPerDay >= 6)[0];
+  const k = YEAR_MULTIPLES.find((n) => n * 365 * pxPerDay >= minGap) ?? YEAR_MULTIPLES[YEAR_MULTIPLES.length - 1]!;
+  const fine = YEAR_MULTIPLES.find((n) => n < k && k % n === 0 && n * 365 * pxPerDay >= 6);
   const at = (n: number) => dayOf(anchor.y + n, anchor.m ?? 1, anchor.d ?? 1);
-  const start = dayOf(anchor.y, anchor.m ?? 1, anchor.d ?? 1);
+  const start = at(0);
   const n0 = Math.floor((from - start) / YEAR_DAYS) - 1;
   const n1 = Math.ceil((to - start) / YEAR_DAYS) + 1;
   const make = (every: number, labelled: boolean): Tick[] => {

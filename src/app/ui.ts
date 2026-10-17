@@ -135,6 +135,8 @@ export function menu(anchor: HTMLElement, items: (MenuItem | HTMLElement)[], cla
 
 export const closeMenus = (): void => openMenu?.close();
 
+let dialogs = 0;
+
 /**
  * A modal dialog with a title, a body and buttons. Resolves with the value of
  * the button pressed, or null on Esc / close.
@@ -148,11 +150,13 @@ export function dialog<T extends string>(options: {
   check?: (value: T) => boolean;
 }): Promise<T | null> {
   return new Promise((resolve) => {
-    const el = h('dialog', { class: `dialog ${options.className ?? ''}`, 'aria-labelledby': 'dialog-title' });
+    // Dialogs open over each other (the editor's confirm, the library over the settings): each names its own title.
+    const titleId = `dialog-title-${++dialogs}`;
+    const el = h('dialog', { class: `dialog ${options.className ?? ''}`, 'aria-labelledby': titleId });
     const form = h('form', { method: 'dialog', class: 'dialog-form' });
     form.append(
       h('div', { class: 'sheet-handle', 'aria-hidden': 'true' }),
-      h('h2', { id: 'dialog-title', class: 'dialog-title' }, options.title),
+      h('h2', { id: titleId, class: 'dialog-title' }, options.title),
       typeof options.body === 'string' ? h('p', { class: 'dialog-text' }, options.body) : (options.body ?? ''),
       h(
         'div',

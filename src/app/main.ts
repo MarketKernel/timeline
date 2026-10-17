@@ -11,14 +11,15 @@
 import { PAGE_SOURCE } from './source';
 import { detectLanguage, setLanguage, t, tn, translatePage } from '../core/i18n';
 import { describeScale, nearestPreset, presetsFor, pxPerDayOf, specText, stepPreset, type ScaleSpec } from '../core/scale';
-import { byId, h, isMac } from './dom';
-import { FileError, PICKER_TYPES } from './files';
+import { byId, h, isMac, isTyping } from './dom';
+import { FileError, openPicker, PICKER_TYPES } from './files';
 import { Minimap } from './minimap';
-import { setupEditing } from './editor';
+import { setupEditing } from './editing';
 import { setupEras } from './eras';
 import { embeddedTimeline, exportPage, readEmbedded } from './export';
 import { setupMusic, syncMusic } from './music';
-import { applyStyle, newTimeline, setupProperties } from './properties';
+import { applyStyle } from './look';
+import { newTimeline, setupProperties } from './properties';
 import { setupReading } from './reading';
 import { renderShelf } from './shelf';
 import { applyUpdate, canUpdate, checkForUpdate, isPwa, justUpdated, startUpdates, updateState, type UpdateState } from './update';
@@ -26,7 +27,7 @@ import { listRecent, permitted, removeRecent, type RecentFile } from './recent';
 import { closeSession, openFile, rememberPosition, save, showStart, startSession, updateTitle } from './session';
 import { saveSettings, settingsSheet, type Settings } from './settings';
 import { app, emit, on } from './state';
-import { closeMenus, menu, toast, type MenuItem } from './ui';
+import { dialog, menu, toast, type MenuItem } from './ui';
 import { Strip } from './view';
 
 /* ------------------------------------------------------------------ *
@@ -73,7 +74,7 @@ export function updateSettings(change: Partial<Settings>): void {
  * ------------------------------------------------------------------ */
 
 async function pickFile(): Promise<void> {
-  const picker = (window as unknown as { showOpenFilePicker?: (o: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker;
+  const picker = openPicker();
   if (picker) {
     try {
       const [handle] = await picker({ types: PICKER_TYPES, excludeAcceptAllOption: false });
@@ -173,6 +174,26 @@ function zoomStep(direction: 1 | -1): void {
   else app.strip.zoomBy(direction > 0 ? 2 : 0.5, undefined, true);
 }
 
+/** Where the project lives, as a link: opened by the reader in a new tab, never fetched by the page. */
+const homeLink = (): HTMLAnchorElement => h('a', { class: 'home-link', href: __APP_HOME__, target: '_blank', rel: 'noopener noreferrer' }, __APP_HOME__.replace(/^https?:\/\//, ''));
+
+/** About: what the page is, its version, and where the project lives. */
+function about(): void {
+  const logo = document.querySelector<HTMLImageElement>('.start-logo')?.getAttribute('src');
+  void dialog({
+    title: t('about', 'About Timeline'),
+    body: h(
+      'div',
+      { class: 'about' },
+      logo ? h('img', { class: 'about-logo', src: logo, alt: '', width: '56', height: '56' }) : null,
+      h('p', {}, t('about', 'A chronology viewer and editor in one HTML file. It works from a disk and never touches the network.')),
+      h('p', { class: 'about-version' }, `${t('about', 'Version')} ${__APP_VERSION__}`),
+      h('p', {}, homeLink()),
+    ),
+    buttons: [{ label: t('ui', 'Close'), value: 'ok', primary: true }],
+  });
+}
+
 function moreMenu(): void {
   const session = app.session;
   if (!session) return;
@@ -181,6 +202,7 @@ function moreMenu(): void {
     menu(byId('more'), [
       { label: t('menu', 'Print or save as PDF'), run: () => window.print() },
       { label: t('menu', 'Settings'), run: () => emit('settings'), separator: true },
+      { label: t('menu', 'About Timeline'), run: about, separator: true },
     ]);
     return;
   }
@@ -192,6 +214,7 @@ function moreMenu(): void {
     { label: t('menu', 'Export as a web page…'), run: () => void exportPage(), disabled: !PAGE_SOURCE, separator: true },
     { label: t('menu', 'Print or save as PDF'), run: () => window.print() },
     { label: t('menu', 'Settings'), run: () => emit('settings'), separator: true },
+    { label: t('menu', 'About Timeline'), run: about, separator: true },
     { label: t('menu', 'Close'), run: () => void closeSession().then((ok) => ok && showStart()), separator: true },
   ]);
 }
@@ -199,11 +222,6 @@ function moreMenu(): void {
 /* ------------------------------------------------------------------ *
  * Keyboard (Task §5.3) — the parts that are the strip's
  * ------------------------------------------------------------------ */
-
-function typing(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-}
 
 function onKey(event: KeyboardEvent): void {
   const session = app.session;
@@ -213,7 +231,7 @@ function onKey(event: KeyboardEvent): void {
     if (session) void save(event.shiftKey);
     return;
   }
-  if (!session || byId('app').hidden || typing(event.target) || document.querySelector('dialog[open]')) return;
+  if (!session || byId('app').hidden || isTyping(event.target) || document.querySelector('dialog[open]')) return;
   if (mod && event.key.toLowerCase() === 'z') {
     event.preventDefault();
     if (event.shiftKey) session.history.redo();
@@ -342,7 +360,7 @@ function versionBlock(): Node {
   };
   button.addEventListener('click', () => (updateState().kind === 'ready' ? void update() : void checkForUpdate()));
   sync();
-  window.addEventListener('timeline:update', sync);
+  on('update', sync);
   return h('div', { class: 'settings-version' }, line, status, button);
 }
 
@@ -354,7 +372,7 @@ function setupUpdates(): void {
       note.replaceChildren(updateText(state), ' ', h('button', { class: 'link-button', type: 'button', onclick: () => void update() }, t('update', 'Update')));
     }
     byId('more').classList.toggle('has-update', state.kind === 'ready');
-    window.dispatchEvent(new CustomEvent('timeline:update'));
+    emit('update');
   });
   if (justUpdated()) toast(t('update', 'Updated to {version}', { version: __APP_VERSION__ }));
   if (isPwa()) void navigator.storage?.persist?.();
@@ -402,6 +420,8 @@ function start(): void {
   applyTheme();
   applyLanguage();
   byId('version').textContent = __APP_VERSION__;
+  // The start screen's last line: the version, and where the project lives.
+  byId('version').after(' · ', homeLink());
 
   app.strip = new Strip(byId('strip'), {
     select: (id) => emit('select', id),
@@ -447,7 +467,7 @@ function start(): void {
   setupProperties();
   on('settings', () => void settingsSheet({ settings: app.settings, change: updateSettings, extra: versionBlock, readOnly: app.readOnly }));
   byId('start-settings').addEventListener('click', () => emit('settings'));
-  window.addEventListener('timeline:start', () => {
+  on('start', () => {
     void renderRecent();
     void renderShelf();
   });

@@ -8,7 +8,7 @@
 import { t } from '../core/i18n';
 import type { ImageInfo } from '../core/model';
 import { h } from './dom';
-import { PICKER_TYPES, readTimeline } from './files';
+import { openPicker, PICKER_TYPES, readTimeline } from './files';
 import { ImageStore, type NewImage } from './images';
 import { lastLibrary, permitted, rememberLibrary } from './recent';
 import { dialog, toast } from './ui';
@@ -20,7 +20,7 @@ export interface Picked {
 }
 
 async function chooseFile(): Promise<{ file: File; handle: FileSystemFileHandle | null } | null> {
-  const picker = (window as unknown as { showOpenFilePicker?: (o: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker;
+  const picker = openPicker();
   if (picker) {
     const last = await lastLibrary();
     try {
@@ -35,6 +35,8 @@ async function chooseFile(): Promise<{ file: File; handle: FileSystemFileHandle 
   return new Promise((resolve) => {
     const input = h('input', { type: 'file', accept: '.timeline,.zip' });
     input.addEventListener('change', () => resolve(input.files?.[0] ? { file: input.files[0], handle: null } : null));
+    // Without it a cancelled picker would leave the editor waiting for good.
+    input.addEventListener('cancel', () => resolve(null));
     input.click();
   });
 }
@@ -68,10 +70,26 @@ export async function pickFromLibrary(fresh = false): Promise<Picked | null> {
   }
   let picked: string | null = null;
   const grid = h('div', { class: 'library-grid', role: 'listbox' });
+  // A thumb is read out of the file as its tile scrolls near: a library of hundreds costs a screenful at first.
+  const waiting = new Map<Element, string>();
+  const lazy = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const hash = waiting.get(entry.target);
+        if (!entry.isIntersecting || !hash) continue;
+        waiting.delete(entry.target);
+        lazy.unobserve(entry.target);
+        const img = entry.target as HTMLImageElement;
+        void store.thumb(hash).then((url) => url && (img.src = url));
+      }
+    },
+    { root: grid, rootMargin: '200px' },
+  );
   for (const hash of hashes) {
     const info = doc.images[hash]!;
     const img = h('img', { alt: '', class: 'library-thumb' });
-    void store.thumb(hash).then((url) => url && (img.src = url));
+    waiting.set(img, hash);
+    lazy.observe(img);
     const button = h(
       'button',
       {
@@ -121,6 +139,7 @@ export async function pickFromLibrary(fresh = false): Promise<Picked | null> {
     }
     return { hash: picked, info, image: { ext: info.ext, thumb: thumb ?? image, image } };
   } finally {
+    lazy.disconnect();
     store.dispose();
   }
 }
