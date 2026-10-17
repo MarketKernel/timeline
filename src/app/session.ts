@@ -10,7 +10,7 @@ import { extentOf, parseDoc, serializeDoc, usedImages, type Doc, type Warning } 
 import { pxPerDayOf } from '../core/scale';
 import { blobSource, openZip, rootPrefix } from '../core/zip';
 import { byId, h } from './dom';
-import { canSaveInPlace, download, FileError, fileNameFor, timelineBlob, PICKER_TYPES, readTimeline, saveToHandle, shareFile, type Opened } from './files';
+import { canSaveInPlace, download, FileError, fileNameFor, timelineBlob, PICKER_TYPES, readTimeline, saveToHandle, shareFile, sizeText, type Opened } from './files';
 import { ImageStore } from './images';
 import { applyStyle } from './properties';
 import { addRecent, dropDraft, loadDraft, permitted, saveDraft } from './recent';
@@ -72,8 +72,8 @@ export async function openFile(file: File, handle: FileSystemFileHandle | null =
 
 /** Shows a document that is open now: from a file, or new from a template. */
 export async function startSession(opened: Omit<Opened, 'file'>, handle: FileSystemFileHandle | null = null, remote = false): Promise<void> {
-  const { doc, warnings, archive, prefix, name } = opened;
-  const store = new ImageStore(archive, prefix, (hash) => doc.images[hash]?.ext);
+  const { doc, warnings, archive, prefix, name, folder } = opened;
+  const store = new ImageStore(archive, prefix, (hash) => doc.images[hash]?.ext, folder);
   const session: Session = { doc, history: new History(doc), store, archive, prefix, name, handle, remote };
   app.session = session;
   // The file's look before its first frame, not after a draft has been offered.
@@ -88,8 +88,11 @@ export async function startSession(opened: Omit<Opened, 'file'>, handle: FileSys
   app.minimap.invalidate();
   updateTitle();
   if (warnings.length) showWarnings(warnings);
-  if (archive || handle) void rememberRecent(session);
-  await offerDraft(session);
+  // An exported page is not the editor: it neither joins the recent files nor picks up the editor's drafts.
+  if (!app.readOnly) {
+    if (archive || handle) void rememberRecent(session);
+    await offerDraft(session);
+  }
   emit('opened');
 }
 
@@ -208,7 +211,7 @@ function stampModified(doc: Doc): void {
 /** Saves into the open file when it can; otherwise asks where (or downloads). */
 export async function save(as = false): Promise<boolean> {
   const session = app.session;
-  if (!session || app.busy) return false;
+  if (!session || app.busy || app.readOnly) return false;
   app.busy = true;
   try {
     stampModified(session.doc);
@@ -259,7 +262,7 @@ export async function save(as = false): Promise<boolean> {
     await dropDraft(oldDraft);
     await dropDraft(draftKey(session.doc, session.name));
     void rememberRecent(session);
-    const size = result.bytes < 1 << 20 ? t('files', '{n} KB', { n: Math.max(1, Math.round(result.bytes / 1024)) }) : t('files', '{n} MB', { n: (result.bytes / 1024 / 1024).toFixed(1) });
+    const size = sizeText(result.bytes);
     toast(
       result.dropped
         ? tn('files', 'Saved, {size}; {count} unused image removed', 'Saved, {size}; {count} unused images removed', result.dropped, { size })

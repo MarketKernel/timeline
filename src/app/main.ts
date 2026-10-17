@@ -7,20 +7,23 @@
  * where it is saved back to.
  */
 
+// First: it keeps the page as it was loaded, before any other module runs.
+import { PAGE_SOURCE } from './source';
 import { detectLanguage, setLanguage, t, tn, translatePage } from '../core/i18n';
 import { describeScale, nearestPreset, presetsFor, pxPerDayOf, specText, stepPreset, type ScaleSpec } from '../core/scale';
 import { byId, h, isMac } from './dom';
-import { PICKER_TYPES } from './files';
+import { FileError, PICKER_TYPES } from './files';
 import { Minimap } from './minimap';
 import { setupEditing } from './editor';
 import { setupEras } from './eras';
+import { embeddedTimeline, exportPage, readEmbedded } from './export';
 import { setupMusic, syncMusic } from './music';
 import { applyStyle, newTimeline, setupProperties } from './properties';
 import { setupReading } from './reading';
 import { renderShelf } from './shelf';
 import { applyUpdate, canUpdate, checkForUpdate, isPwa, justUpdated, startUpdates, updateState, type UpdateState } from './update';
 import { listRecent, permitted, removeRecent, type RecentFile } from './recent';
-import { closeSession, openFile, rememberPosition, save, showStart, updateTitle } from './session';
+import { closeSession, openFile, rememberPosition, save, showStart, startSession, updateTitle } from './session';
 import { saveSettings, settingsSheet, type Settings } from './settings';
 import { app, emit, on } from './state';
 import { closeMenus, menu, toast, type MenuItem } from './ui';
@@ -174,11 +177,19 @@ function moreMenu(): void {
   const session = app.session;
   if (!session) return;
   const mod = isMac() ? '⌘' : 'Ctrl+';
+  if (app.readOnly) {
+    menu(byId('more'), [
+      { label: t('menu', 'Print or save as PDF'), run: () => window.print() },
+      { label: t('menu', 'Settings'), run: () => emit('settings'), separator: true },
+    ]);
+    return;
+  }
   menu(byId('more'), [
     { label: t('menu', 'Save'), hint: `${mod}S`, run: () => void save() },
     { label: t('menu', 'Save as…'), run: () => void save(true) },
     { label: t('menu', 'Open…'), run: () => void pickFile(), separator: true },
     { label: t('menu', 'New timeline…'), run: () => void newTimeline() },
+    { label: t('menu', 'Export as a web page…'), run: () => void exportPage(), disabled: !PAGE_SOURCE },
     { label: t('menu', 'Print or save as PDF'), run: () => window.print() },
     { label: t('menu', 'Settings'), run: () => emit('settings'), separator: true },
     { label: t('menu', 'Close'), run: () => void closeSession().then((ok) => ok && showStart()), separator: true },
@@ -368,6 +379,22 @@ function listenForLaunches(): void {
 }
 
 /* ------------------------------------------------------------------ *
+ * An exported page (export.ts)
+ * ------------------------------------------------------------------ */
+
+/** Opens the timeline the page carries, at once: it has no start screen, no other file, nothing to close. */
+async function openEmbedded(data: NonNullable<ReturnType<typeof embeddedTimeline>>): Promise<void> {
+  byId('start').hidden = true;
+  byId('home').hidden = true;
+  byId('edit-toggle').hidden = true;
+  try {
+    await startSession(await readEmbedded(data));
+  } catch (error) {
+    toast(error instanceof FileError ? error.message : t('files', 'The file could not be opened: {error}', { error: String((error as Error).message ?? error) }), { kind: 'error', duration: 0 });
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Start
  * ------------------------------------------------------------------ */
 
@@ -407,13 +434,18 @@ function start(): void {
       event.returnValue = '';
     }
   });
-  listenForFiles();
+  const embedded = embeddedTimeline();
+  app.readOnly = !!embedded;
+  if (!embedded) listenForFiles();
   setupReading();
-  setupEditing();
-  setupEras();
+  // An exported page is read, not edited: there is no edit mode to turn on.
+  if (!embedded) {
+    setupEditing();
+    setupEras();
+  }
   setupMusic((on) => updateSettings({ music: on }));
   setupProperties();
-  on('settings', () => void settingsSheet({ settings: app.settings, change: updateSettings, extra: versionBlock }));
+  on('settings', () => void settingsSheet({ settings: app.settings, change: updateSettings, extra: versionBlock, readOnly: app.readOnly }));
   byId('start-settings').addEventListener('click', () => emit('settings'));
   window.addEventListener('timeline:start', () => {
     void renderRecent();
@@ -421,10 +453,13 @@ function start(): void {
   });
   // The shelf shows each chronology in the interface's language.
   on('language', () => void renderShelf());
-  setupUpdates();
   on('opened', () => updateScaleLabel());
-  showStart();
-  listenForLaunches();
+  if (embedded) void openEmbedded(embedded);
+  else {
+    setupUpdates();
+    showStart();
+    listenForLaunches();
+  }
   // For the browser tests and the screenshot tool: the state, the views. Nothing secret lives here.
   (window as unknown as { timeline: typeof app }).timeline = app;
   document.documentElement.dataset.ready = 'true';

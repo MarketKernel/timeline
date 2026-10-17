@@ -13,7 +13,7 @@
 import { t } from '../core/i18n';
 import { missingImages, parseDoc, serializeDoc, usedImages, type Doc, type Warning } from '../core/model';
 import { blobSource, isJunk, openZip, rootPrefix, ZipError, ZipWriter, type Sink, type ZipArchive } from '../core/zip';
-import { ImageStore } from './images';
+import { ImageStore, type MediaFolder } from './images';
 
 export interface Opened {
   doc: Doc;
@@ -22,6 +22,8 @@ export interface Opened {
   prefix: string;
   name: string;
   file: File;
+  /** An exported page's pictures, in a folder beside it rather than in a zip. */
+  folder?: MediaFolder;
 }
 
 export class FileError extends Error {
@@ -78,11 +80,17 @@ export async function readTimeline(file: File): Promise<Opened> {
   }
   const { doc, warnings } = parsed;
   const zip = archive;
-  warnings.push(...missingImages(doc, (hash, info) => !!zip?.has(`${prefix}images/${hash}.${info.ext}`)));
-  if (doc.music && !zip?.has(`${prefix}audio/${doc.music.file}.${doc.music.ext}`)) {
+  warnings.push(...mediaWarnings(doc, (path) => !!zip?.has(prefix + path)));
+  return { doc, warnings, archive, prefix, name: file.name, file };
+}
+
+/** The pictures and the music a document names but `has` (a path as the zip has it: `images/….webp`) cannot find. */
+export function mediaWarnings(doc: Doc, has: (path: string) => boolean): Warning[] {
+  const warnings = missingImages(doc, (hash, info) => has(`images/${hash}.${info.ext}`));
+  if (doc.music && !has(`audio/${doc.music.file}.${doc.music.ext}`)) {
     warnings.push({ path: 'music', code: 'music-missing', text: t('files', 'The background music is not in the file.') });
   }
-  return { doc, warnings, archive, prefix, name: file.name, file };
+  return warnings;
 }
 
 /** The entries of the open file that a save carries over as they are: not timeline.json, not image files. */
@@ -101,11 +109,15 @@ export interface SaveResult {
 }
 
 /** Writes the document as a .timeline into `sink`. `doc.meta.modified` is set by the caller. */
+/** The document as a file holds it: only the pictures it uses. The one in memory keeps the rest for undo. */
+export function asWritten(doc: Doc): { written: Doc; used: string[] } {
+  const used = [...usedImages(doc)].filter((hash) => doc.images[hash]).sort();
+  return { written: { ...doc, images: Object.fromEntries(used.map((hash) => [hash, doc.images[hash]!])) }, used };
+}
+
 export async function writeTimeline(doc: Doc, store: ImageStore, archive: ZipArchive | null, prefix: string, sink: Sink): Promise<SaveResult> {
   const writer = new ZipWriter(sink);
-  const used = [...usedImages(doc)].filter((hash) => doc.images[hash]).sort();
-  // The file lists only the pictures it holds; the document in memory keeps the rest for undo.
-  const written = { ...doc, images: Object.fromEntries(used.map((hash) => [hash, doc.images[hash]!])) };
+  const { written, used } = asWritten(doc);
   await writer.add('timeline.json', encoder.encode(serializeDoc(written)));
   for (const hash of used) {
     const ext = doc.images[hash]!.ext;
@@ -200,7 +212,7 @@ export function download(blob: Blob, name: string): void {
 
 /** iOS has no downloads folder: "Share → Save to Files". True if the share sheet took it. */
 export async function shareFile(blob: Blob, name: string): Promise<boolean> {
-  const file = new File([blob], name, { type: 'application/zip' });
+  const file = new File([blob], name, { type: blob.type || 'application/zip' });
   if (!navigator.canShare?.({ files: [file] })) return false;
   try {
     await navigator.share({ files: [file] });
@@ -208,6 +220,11 @@ export async function shareFile(blob: Blob, name: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** "640 KB", "12.5 MB". */
+export function sizeText(bytes: number): string {
+  return bytes < 1 << 20 ? t('files', '{n} KB', { n: Math.max(1, Math.round(bytes / 1024)) }) : t('files', '{n} MB', { n: (bytes / 1024 / 1024).toFixed(1) });
 }
 
 export const canSaveInPlace = (): boolean => typeof window !== 'undefined' && 'showSaveFilePicker' in window;

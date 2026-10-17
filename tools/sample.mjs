@@ -12,7 +12,8 @@ const { ZipWriter, memorySink, parseDoc, serializeDoc } = await load('core/zip',
 const picture = (hue, label) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 853"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${hue} 45% 72%)"/><stop offset="1" stop-color="hsl(${hue} 35% 38%)"/></linearGradient></defs><rect width="1280" height="853" fill="url(#g)"/><circle cx="960" cy="220" r="120" fill="hsl(${hue + 30} 70% 85%)" opacity=".8"/><path d="M0 700 Q 320 560 640 690 T 1280 650 V 853 H 0 Z" fill="hsl(${hue} 30% 25%)"/><text x="80" y="160" font-family="Georgia" font-size="96" fill="#fff" opacity=".85">${label}</text></svg>`;
 
-export async function sampleTimeline(overrides = {}) {
+/** `entries` adds files of its own to the zip: `{ 'audio/….wav': bytes }` for the music an override names. */
+export async function sampleTimeline(overrides = {}, entries = {}) {
   const json = JSON.parse(await readFile(join(root, 'tests', 'fixtures', 'sample.json'), 'utf8'));
   Object.assign(json, overrides);
   const { doc, warnings } = parseDoc(json);
@@ -22,6 +23,7 @@ export async function sampleTimeline(overrides = {}) {
   await writer.add('timeline.json', new TextEncoder().encode(serializeDoc(doc)));
   const hues = { a1a1a1a1a1a1a1a1: [30, 'Kitty Hawk'], b2b2b2b2b2b2b2b2: [220, 'Apollo'], c3c3c3c3c3c3c3c3: [12, 'Paris'], d4d4d4d4d4d4d4d4: [150, 'Earthrise'] };
   for (const [hash, [hue, label]] of Object.entries(hues)) await writer.add(`images/${hash}.svg`, new TextEncoder().encode(picture(hue, label)));
+  for (const [name, bytes] of Object.entries(entries)) await writer.add(name, bytes, false);
   await writer.finish();
   return out.bytes();
 }

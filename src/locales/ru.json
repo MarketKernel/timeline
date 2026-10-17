@@ -236,6 +236,7 @@
     "Save as…": "Сохранить как…",
     "Open…": "Открыть…",
     "New timeline…": "Новая хронология…",
+    "Export as a web page…": "Экспорт в веб-страницу…",
     "Print or save as PDF": "Печать или сохранение в PDF",
     "Settings": "Настройки",
     "Close": "Закрыть"
@@ -544,5 +545,20 @@
     "“{title}”: its beginning is not a date yet.": "«{title}»: начало — ещё не дата.",
     "The end of the last era is not a date yet.": "Конец последней эпохи — ещё не дата.",
     "The eras are not in time order: “{title}” begins no later than the era above it.": "Эпохи идут не по порядку: «{title}» начинается не позже эпохи выше."
+  },
+  "export": {
+    "A page to read the timeline in any browser, from a disk or a website. It cannot be edited.": "Страница, на которой хронологию можно читать в любом браузере — с диска или на сайте. Изменить её нельзя.",
+    "Pictures": "Картинки",
+    "Inside the page": "Внутри страницы",
+    "One .html file, easy to send. It is larger: the pictures are written into it.": "Один файл .html, его легко отправить. Он больше: картинки записаны прямо в него.",
+    "In a folder beside it": "В папке рядом",
+    "A .zip: the page and a folder with the pictures. Unpack it and open index.html.": "Архив .zip: страница и папка с картинками. Распакуйте его и откройте index.html.",
+    "Export as a web page": "Экспорт в веб-страницу",
+    "Export": "Экспортировать",
+    "Web page": "Веб-страница",
+    "Zip archive": "Архив zip",
+    "Exporting {name}…": "Экспортирую {name}…",
+    "Exported {name}, {size}": "Готово: {name}, {size}",
+    "Could not export: {error}": "Не удалось экспортировать: {error}"
   }
 }

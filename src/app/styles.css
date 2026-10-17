@@ -536,6 +536,11 @@ body.dropping::after {
   text-overflow: ellipsis;
 }
 
+/* An exported page has no way back to a start screen: the title keeps the toolbar's margin itself. */
+#home[hidden] + .doc-title {
+  margin-left: 10px;
+}
+
 .dirty {
   display: inline-block;
   width: 7px;
@@ -2138,6 +2143,13 @@ textarea.field-input {
   display: block;
   font-size: 12px;
   color: var(--ink-faint);
+}
+
+/* Export as a web page: where the pictures go, one of two. */
+.export-options {
+  display: grid;
+  gap: 14px;
+  margin: 4px 0 6px;
 }
 
 /* ---------- Editing ---------- */

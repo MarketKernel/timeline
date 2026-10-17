@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CHROME, sleep, startChrome } from '../tools/chrome.mjs';
 import { checker, load, root } from '../tools/load.mjs';
@@ -612,6 +612,71 @@ try {
   check('…and validates, in one language', [lifeDoc.warnings, lifeDoc.doc.lang], [[], 'ru']);
   check('…with its cover in the zip', [life.has(`images/${lifeDoc.doc.cover}.webp`), life.has(`thumbs/${lifeDoc.doc.cover}.webp`)], [true, true]);
   await key('e', 'KeyE', 69, 'e');
+
+  // Export as a web page (export.ts): the sample with music, both ways, each opened from the disk as a reader would.
+  const musical = join(work, 'flight-music.timeline');
+  await writeFile(musical, await sampleTimeline({ music: { file: 'e5e5e5e5e5e5e5e5', ext: 'wav', title: 'A quiet tone' } }, { 'audio/e5e5e5e5e5e5e5e5.wav': toneWav() }));
+  const exporter = await openTab(`${origin}/timeline.html`);
+  await chrome.viewport(exporter, { width: 1280, height: 800 });
+  await chrome.until(exporter, "document.documentElement.dataset.ready === 'true'");
+  await openViaInput(exporter, musical);
+  await chrome.until(exporter, "document.querySelectorAll('.card').length > 0");
+  const exportAs = async (name, where) => {
+    // The reader opened last is in front: a tab behind it would not finish closing its dialog.
+    await chrome.send('Page.bringToFront', {}, exporter);
+    await ev(exporter, `window.__pick = ${JSON.stringify(name)}`);
+    await chrome.click(exporter, '#more');
+    await ev(exporter, "[...document.querySelectorAll('.menu-item')].find(b => b.textContent.startsWith('Export as a web page')).click()");
+    check(`export (${where}): the dialog asks where the pictures go`, await chrome.until(exporter, "document.querySelectorAll('dialog[open] input[name=export-where]').length === 2"), true);
+    if (where === 'folder') await shot(exporter, '20-export');
+    await ev(exporter, `document.querySelector('dialog[open] input[value=${where}]').click(); document.querySelector('dialog[open] .button--primary').click()`);
+    check(`export (${where}): done`, await chrome.until(exporter, `[...document.querySelectorAll('.toast-text')].some(t => t.textContent.startsWith('Exported ${name}'))`), true);
+    return opfsBytes(exporter, name);
+  };
+  /** Opens an exported page from file:// and checks it shows the sample, read-only, pictures and music included. */
+  const readExport = async (path, label) => {
+    const reader = await chrome.open(pathToFileURL(path).href, label);
+    await chrome.viewport(reader, { width: 1280, height: 800 });
+    check(`${label}: opens at once on its timeline`, await chrome.until(reader, "document.getElementById('start').hidden && document.getElementById('doc-title').textContent === 'A short history of flight' && document.querySelectorAll('.card').length > 0"), true);
+    check(`${label}: its pictures show`, await chrome.until(reader, "(() => { const imgs = [...document.querySelectorAll('.card img')]; return imgs.length > 0 && imgs.every(i => i.complete && i.naturalWidth > 0); })()"), true);
+    check(`${label}: nothing to edit, close or save`, await ev(reader, "[timeline.readOnly, document.getElementById('edit-toggle').hidden, document.getElementById('home').hidden]"), [true, true, true]);
+    await ev(reader, 'document.activeElement?.blur()');
+    await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'e', code: 'KeyE', windowsVirtualKeyCode: 69, text: 'e' }, reader);
+    await sleep(150);
+    check(`${label}: E does not turn edit mode on`, await ev(reader, "[timeline.editing, document.getElementById('edit-bar').hidden]"), [false, true]);
+    await chrome.click(reader, '#more');
+    check(`${label}: the menu has printing and settings only`, await ev(reader, "[...document.querySelectorAll('.menu-item')].map(b => b.textContent)"), ['Print or save as PDF', 'Settings']);
+    await ev(reader, "document.querySelector('.menu-item').closest('.menu') && document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+    await chrome.click(reader, '.card');
+    check(`${label}: a card opens its details, with no Edit`, await chrome.until(reader, "!document.getElementById('details').hidden && ![...document.querySelectorAll('#details button')].some(b => b.textContent === 'Edit')"), true);
+    check(`${label}: the music plays`, await chrome.until(reader, "document.getElementById('music-toggle').dataset.state === 'playing'", 5000), true);
+    check(`${label}: the policy fetches nothing`, /connect-src 'none'/.test(await ev(reader, "document.querySelector('meta[http-equiv=Content-Security-Policy]').content")), true);
+    return reader;
+  };
+
+  const single = Buffer.from(await exportAs('flight.html', 'inside')).toString('utf8');
+  check('inside: one page, the .timeline in it, nothing of the PWA', [single.includes('id="timeline-zip"'), /<link rel="manifest"|<meta name="service-worker"/.test(single)], [true, false]);
+  const singlePath = join(work, 'export', 'flight.html');
+  await mkdir(dirname(singlePath), { recursive: true });
+  await writeFile(singlePath, single);
+  const singleReader = await readExport(singlePath, 'inside');
+  check('inside: pictures come out of the page', await ev(singleReader, "[...document.querySelectorAll('.card img')].every(i => i.src.startsWith('blob:'))"), true);
+
+  const zipped = await core.openZip(core.bytesSource(await exportAs('flight-music.zip', 'folder')));
+  const names = zipped.entries.map((e) => e.name).sort();
+  check('folder: the page and its media in one folder', [names.includes('flight-music/index.html'), names.includes('flight-music/media/images/a1a1a1a1a1a1a1a1.svg'), names.includes('flight-music/media/audio/e5e5e5e5e5e5e5e5.wav'), names.every((n) => n.startsWith('flight-music/'))], [true, true, true, true]);
+  const site = join(work, 'site');
+  for (const entry of zipped.entries) {
+    await mkdir(dirname(join(site, entry.name)), { recursive: true });
+    await writeFile(join(site, entry.name), await zipped.read(entry));
+  }
+  const folderHtml = await readFile(join(site, 'flight-music', 'index.html'), 'utf8');
+  check('folder: the page holds no picture', [folderHtml.includes('id="timeline-zip"'), folderHtml.length < single.length], [false, true]);
+  const folderReader = await readExport(join(site, 'flight-music', 'index.html'), 'folder');
+  check('folder: pictures come from the folder', await ev(folderReader, "[...document.querySelectorAll('.card img')].every(i => i.src.startsWith('file:') && i.src.includes('/media/images/'))"), true);
+  await shot(folderReader, '21-exported');
+  check('no errors in the exported pages', chrome.errors, []);
+  await chrome.send('Page.bringToFront', {}, tab);
 
   // Budgets (Task §11): a file with 500 pictures opens in < 300 ms; a rebuild with 1000 items on screen is quick.
   await chrome.click(tab, '#home');

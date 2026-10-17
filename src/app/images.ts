@@ -6,6 +6,9 @@
  * Images added in this session (the editor, a paste) live here as Blobs until
  * the next save writes them into the file — and so does the background music
  * (`audio/`), read whole when it is played.
+ *
+ * A page exported with its pictures in a folder (export.ts) has no zip: its
+ * pictures and music are files beside it, shown by their relative URLs.
  */
 
 import { exifDate, type TakenAt } from '../core/exif';
@@ -34,6 +37,17 @@ export interface NewImage {
   image: Blob;
 }
 
+/** An exported page's folder of pictures: where it is, and which of the zip's paths it holds. */
+export interface MediaFolder {
+  base: string;
+  files: ReadonlySet<string>;
+}
+
+/** Only a blob: URL is the store's to let go; a file's URL is just a string. */
+function revoke(url: string): void {
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+}
+
 interface Cached {
   url: string;
   refs: number;
@@ -60,7 +74,13 @@ export class ImageStore implements ImageSource {
     private archive: ZipArchive | null,
     private prefix = '',
     private extOf: (hash: string) => ImageExt | undefined = () => 'webp',
+    private readonly folder: MediaFolder | null = null,
   ) {}
+
+  /** The URL of a file in the exported page's folder (`images/….webp`), when it is there. */
+  linked(path: string): string | null {
+    return this.folder?.files.has(path) ? this.folder.base + path : null;
+  }
 
   /** After a save the file is a new one: entries are read from it from now on. */
   rebase(archive: ZipArchive | null, prefix = ''): void {
@@ -75,6 +95,7 @@ export class ImageStore implements ImageSource {
   /** Whether the file (or this session) has both sizes of the image. */
   has(hash: string, ext: ImageExt): boolean {
     if (this.added.has(hash)) return true;
+    if (this.linked(`images/${hash}.${ext}`)) return true;
     return !!this.archive?.has(`${this.prefix}images/${hash}.${ext}`);
   }
 
@@ -105,6 +126,10 @@ export class ImageStore implements ImageSource {
       loading = (async () => {
         const fresh = this.added.get(hash);
         const ext = this.extOf(hash) ?? 'webp';
+        if (this.folder) {
+          const image = this.linked(`images/${hash}.${ext}`);
+          return large ? image : (this.linked(`thumbs/${hash}.webp`) ?? image);
+        }
         // A thumb is always WebP; a file without one falls back to the large image.
         const blob = large
           ? (fresh?.image ?? (await this.blob(`images/${hash}.${ext}`, MIME[ext])))
@@ -118,7 +143,7 @@ export class ImageStore implements ImageSource {
     if (!url) return null;
     const existing = this.thumbs.get(key);
     if (existing) {
-      if (existing.url !== url) URL.revokeObjectURL(url);
+      if (existing.url !== url) revoke(url);
       existing.refs++;
       existing.used = ++this.clock;
       return existing.url;
@@ -140,7 +165,7 @@ export class ImageStore implements ImageSource {
       if (idle.length <= spare) continue;
       idle.sort(([, a], [, b]) => a.used - b.used);
       for (const [key, c] of idle.slice(0, idle.length - spare)) {
-        URL.revokeObjectURL(c.url);
+        revoke(c.url);
         this.thumbs.delete(key);
       }
     }
@@ -180,7 +205,7 @@ export class ImageStore implements ImageSource {
   }
 
   dispose(): void {
-    for (const c of this.thumbs.values()) URL.revokeObjectURL(c.url);
+    for (const c of this.thumbs.values()) revoke(c.url);
     this.thumbs.clear();
     this.panel.length = 0;
   }

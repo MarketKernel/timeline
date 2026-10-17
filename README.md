@@ -92,6 +92,12 @@ holds no data at all, never touches the network, and works from a disk.
 - **New timeline**: the same form as Timeline settings, on an empty file — a title, the
   dates it spans, a cover, the look, in the language you pick (the interface's unless you
   choose another). It opens in edit mode, ready for its first event.
+- **Export as a web page** (in the ⋯ menu): the open timeline, unsaved changes included, as a
+  page anyone reads in a browser and no one edits — it opens straight on the strip, with no
+  start screen, no edit mode, nothing to save, and like the app it never touches the network.
+  Its pictures and music go **inside the page** (one `.html`, a third larger than the
+  `.timeline`) or **in a folder beside it**: a `.zip` of `<name>/index.html` and
+  `<name>/media/`, to unpack and open from a disk or put on a website.
 - **Print** ("Save as PDF") prints the visible range on one page — the poster export for now.
 
 ### Keyboard
@@ -224,6 +230,7 @@ and the files it lists); the build puts none there.
 | `src/app/minimap.ts`, `details.ts`, `gallery.ts`, `search.ts`, `reading.ts` | the mini-map, the details panel, its pictures and full screen, search, keyboard |
 | `src/app/editor.ts`, `eras.ts`, `library.ts`, `images.ts` | editing (the edit bar, adding on the strip, drags, the dialog with its colour picker), the eras' list, pictures from another file, photo encoding and the image cache |
 | `src/app/session.ts`, `files.ts`, `recent.ts` | opening, saving, drafts, recent files |
+| `src/app/export.ts`, `source.ts` | Export as a web page: this page as it was loaded, with the timeline inside; opening it read-only |
 | `src/app/shelf.ts`, `update.ts`, `src/pwa/sw.js` | the PWA: the shelf, updates, the service worker |
 | `src/app/properties.ts` | Timeline settings and New timeline: the file's texts, cover, dates, opening scale and look; the look on the page |
 | `src/app/music.ts` | a timeline's background music: playing, fading, pausing, the toolbar's speaker |

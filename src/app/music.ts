@@ -28,7 +28,7 @@ let waiting = false;
 function stop(): void {
   cancelAnimationFrame(fade);
   audio?.pause();
-  if (url) URL.revokeObjectURL(url);
+  if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
   audio = url = loaded = null;
 }
 
@@ -79,16 +79,18 @@ export async function syncMusic(): Promise<void> {
   if (loaded !== music.file) {
     stop();
     loaded = music.file;
-    const blob = await session.store.audio(music.file, music.ext);
+    // An exported page may have it in its folder, a file beside the page.
+    const linked = session.store.linked(`audio/${music.file}.${music.ext}`);
+    const blob = linked ? null : await session.store.audio(music.file, music.ext);
     // Another file, or no music, by the time the bytes came.
     if (loaded !== music.file || app.session !== session) return;
-    if (!blob) {
+    if (!linked && !blob) {
       // Not in the file — or not handed to the store yet (a new timeline): asked again at the next sync.
       loaded = null;
       button.dataset.state = 'missing';
       return;
     }
-    url = URL.createObjectURL(blob);
+    url = linked ?? URL.createObjectURL(blob!);
     const el = new Audio(url);
     el.loop = true;
     // A player stopped and let go may still say "pause" afterwards: only the current one is heard.

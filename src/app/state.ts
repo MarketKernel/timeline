@@ -32,6 +32,8 @@ export const app = {
   busy: false,
   /** Edit mode: outside it nothing moves by accident. */
   editing: false,
+  /** An exported page: one timeline, opened at once, to read and never to edit or save. */
+  readOnly: false,
 };
 
 type Events = {

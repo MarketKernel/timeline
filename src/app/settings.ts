@@ -97,9 +97,11 @@ export interface SettingsSheetOptions {
   change(next: Partial<Settings>): void;
   /** The PWA's version line and Update button; absent in the single file. */
   extra?: () => Node | null;
+  /** An exported page: nothing is saved there, automatically or not. */
+  readOnly?: boolean;
 }
 
-export async function settingsSheet({ settings, change, extra }: SettingsSheetOptions): Promise<void> {
+export async function settingsSheet({ settings, change, extra, readOnly = false }: SettingsSheetOptions): Promise<void> {
   const select = <K extends 'language' | 'theme'>(key: K, label: string, options: [Settings[K], string][]) => {
     const el = h('select', { class: 'field-input', id: `setting-${key}` }, ...options.map(([value, text]) => h('option', { value: String(value), selected: settings[key] === value }, text)));
     el.addEventListener('change', () => change({ [key]: el.value } as Partial<Settings>));
@@ -122,7 +124,7 @@ export async function settingsSheet({ settings, change, extra }: SettingsSheetOp
       ['light', t('settings', 'Light')],
       ['dark', t('settings', 'Dark')],
     ]),
-    toggle('autosave', t('settings', 'Save automatically'), t('settings', 'Every 30 seconds into the open file, when the browser allows it; otherwise a recovery copy is kept.')),
+    readOnly ? null : toggle('autosave', t('settings', 'Save automatically'), t('settings', 'Every 30 seconds into the open file, when the browser allows it; otherwise a recovery copy is kept.')),
     toggle('showMinor', t('settings', 'Show small events'), t('settings', 'Events with small cards — the footnotes — when zoomed in.')),
     toggle('secondRuler', t('settings', 'Show the second ruler'), t('settings', 'Years from the file’s anchor: Anno Mundi, an age.')),
     toggle('reduceMotion', t('settings', 'Reduce motion'), t('settings', 'Jump instead of gliding; no inertia.')),
