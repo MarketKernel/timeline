@@ -185,11 +185,11 @@ function moreMenu(): void {
     return;
   }
   menu(byId('more'), [
-    { label: t('menu', 'Save'), hint: `${mod}S`, run: () => void save() },
-    { label: t('menu', 'Save as…'), run: () => void save(true) },
-    { label: t('menu', 'Open…'), run: () => void pickFile(), separator: true },
+    { label: t('menu', 'Open…'), run: () => void pickFile() },
     { label: t('menu', 'New timeline…'), run: () => void newTimeline() },
-    { label: t('menu', 'Export as a web page…'), run: () => void exportPage(), disabled: !PAGE_SOURCE },
+    { label: t('menu', 'Save'), hint: `${mod}S`, run: () => void save(), separator: true },
+    { label: t('menu', 'Save as…'), run: () => void save(true) },
+    { label: t('menu', 'Export as a web page…'), run: () => void exportPage(), disabled: !PAGE_SOURCE, separator: true },
     { label: t('menu', 'Print or save as PDF'), run: () => window.print() },
     { label: t('menu', 'Settings'), run: () => emit('settings'), separator: true },
     { label: t('menu', 'Close'), run: () => void closeSession().then((ok) => ok && showStart()), separator: true },
