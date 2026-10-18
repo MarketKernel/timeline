@@ -63,6 +63,36 @@
       "cover": "https://timelines.marketkernel.com/covers/scientific-discoveries-ru.webp"
     },
     {
+      "id": "mathematics-en",
+      "group": "mathematics",
+      "lang": "en",
+      "file": "https://timelines.marketkernel.com/mathematics.en.timeline",
+      "title": "A History of Mathematics",
+      "description": "Five thousand years of mathematics on one strip, from the first numbers on clay to proofs checked by computer and AI at the Mathematical Olympiad. Eight eras give the big picture: the first civilisations, antiquity, India, China and Islam, Renaissance algebra, the age of calculus, the century of rigour, the crisis of foundations and the age of computers. Below the axis run bars: schools and institutions from Plato's Academy and the House of Wisdom to Göttingen, Bourbaki and the Olympiad; famous problems for as long as they stood open — Fermat, Kepler, Goldbach, four colours, Riemann, Poincaré; and the lives of two people everyone knows: Pythagoras and Isaac Newton. A card's background is its field — numbers and number theory, geometry and topology, algebra, analysis, probability and statistics, logic and foundations, computing and applications, people and institutions; the tag names it too. The colour of a dot is how much an event matters, as a rainbow: red — turning points of the whole story, orange — the main milestones, yellow — notable, green — ordinary, blue — details seen only up close. The strip is to scale: the ancient world takes up most of it, and the last two centuries, which made most of today's mathematics, open as you zoom in. In the background plays Contrapunctus 1 from Bach's The Art of Fugue — a cycle of fugues built from one theme by inversion, augmentation and canon, mathematics in music.",
+      "kind": "history",
+      "span": "3400 BC – present",
+      "items": 241,
+      "images": 82,
+      "size": 14624221,
+      "modified": "2026-10-18",
+      "cover": "https://timelines.marketkernel.com/covers/mathematics-en.webp"
+    },
+    {
+      "id": "mathematics-ru",
+      "group": "mathematics",
+      "lang": "ru",
+      "file": "https://timelines.marketkernel.com/mathematics.ru.timeline",
+      "title": "История математики",
+      "description": "Пять тысяч лет математики на одной ленте — от первых чисел на глине до доказательств, проверенных компьютером, и ИИ на математической олимпиаде. Восемь эпох дают общую картину: первые цивилизации, античность, Индия, Китай и ислам, алгебра Возрождения, век анализа, век строгости, кризис оснований и эпоха компьютеров. Под осью — полосы: школы и институты от Академии Платона и Дома мудрости до Гёттингена, Бурбаки и олимпиады; знаменитые задачи — всё время, пока они оставались открытыми: Ферма, Кеплер, Гольдбах, четыре краски, Риман, Пуанкаре; и годы жизни двух людей, которых знают все: Пифагора и Исаака Ньютона. Фон карточки — область математики: числа и теория чисел, геометрия и топология, алгебра, математический анализ, вероятность и статистика, логика и основания, вычисления и приложения, люди и институты; тег называет её же. Цвет точки — значимость, по радуге: красный — поворотные события всей истории, оранжевый — главные вехи, жёлтый — заметные, зелёный — обычные, синий — подробности, видные только вблизи. Лента в масштабе: древний мир занимает большую её часть, а последние два века, создавшие большую часть сегодняшней математики, раскрываются при приближении. Фоном звучит Контрапункт № 1 из «Искусства фуги» Баха — цикла фуг, выстроенных из одной темы обращением, увеличением и каноном, математики в музыке.",
+      "kind": "history",
+      "span": "3400 до н. э. – н. вр.",
+      "items": 241,
+      "images": 82,
+      "size": 14638176,
+      "modified": "2026-10-18",
+      "cover": "https://timelines.marketkernel.com/covers/mathematics-ru.webp"
+    },
+    {
       "id": "space-exploration-en",
       "group": "space-exploration",
       "lang": "en",
