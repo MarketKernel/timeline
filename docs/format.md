@@ -429,6 +429,10 @@ it lists may be on another site, by full address:
 - **https:// only**, and the other site must allow it: every file and cover needs the
   header `Access-Control-Allow-Origin: *` (or the PWA's own origin). Without it the shelf
   cannot open the file or keep it offline.
+- **No bot check on the files.** A site behind a challenge for scripts (Cloudflare's bot
+  protection, say) refuses the app's fetch, and the shelf cannot open the file. The reader
+  can still download it — every cover has a "Download the file" link, and the error offers
+  one — and open it with "Open", but let the files and covers through the check if you can.
 - **The PWA is built for those sites.** It may fetch only what its policy names, so the build
   reads the library's `index.json` and adds every site it finds there to `connect-src` and
   `img-src` (`npm run build -- --library library/`). A site added to `index.json` later,

@@ -14,8 +14,9 @@ Task.md
 next_tasks.md
 .claude/
 
-# Screenshots from `npm run shots -- <dir>`
+# Screenshots from `npm run shots -- <dir>`, and the ones kept locally in docs
 shots/
+docs/screenshots/
 
 # Logs and caches
 *.log

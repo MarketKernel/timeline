@@ -13,6 +13,11 @@
  * (docs/format.md, "A library"): they are fetched from there, and kept offline
  * the same way.
  *
+ * Each file can also be downloaded, by a plain link the browser follows itself.
+ * The page's own fetch can be refused where the browser is let through: a site
+ * behind a bot check (Cloudflare's, say) answers a script with a challenge it
+ * cannot pass, while a tab shows the challenge to the reader.
+ *
  * From file:// there is no shelf — that page has no server beside it.
  */
 
@@ -59,6 +64,13 @@ async function keepOffline(entry: LibraryEntry, keep: boolean): Promise<boolean>
   }
 }
 
+/**
+ * A link that downloads the file. `download` names it on this site; another site's
+ * file opens in a tab of its own, where a challenge, if any, does not replace the app.
+ */
+const downloadLink = (entry: LibraryEntry, ...children: (Node | string)[]): HTMLAnchorElement =>
+  h('a', { class: 'cover-download', href: at(entry.file), download: fileName(entry.file), target: '_blank', rel: 'noopener' }, ...children);
+
 async function open(entry: LibraryEntry): Promise<void> {
   const close = toast(t('shelf', 'Opening {name}…', { name: entry.title }), { duration: 0 });
   try {
@@ -69,7 +81,11 @@ async function open(entry: LibraryEntry): Promise<void> {
     await openFile(new File([blob], fileName(entry.file), { type: 'application/zip' }), null, true);
   } catch {
     close();
-    toast(t('shelf', '{name} could not be loaded — it is not kept offline and the network is not there.', { name: entry.title }), { kind: 'error' });
+    toast(t('shelf', '{name} could not be loaded here: there is no network, or its site does not let the app fetch it. Download the file and open it.', { name: entry.title }), {
+      kind: 'error',
+      duration: 0,
+      action: { label: t('shelf', 'Download'), run: () => downloadLink(entry).click() },
+    });
   }
 }
 
@@ -121,6 +137,7 @@ export async function renderShelf(): Promise<void> {
             )
           : null,
         h('label', { class: 'cover-check' }, box, h('span', {}, t('shelf', 'Keep offline')), h('span', { class: 'cover-size' }, sizeText(entry.size))),
+        downloadLink(entry, t('shelf', 'Download the file')),
       );
     }),
   );

@@ -83,6 +83,7 @@ try {
   // The shelf.
   check('the shelf lists the library', await chrome.until(tab, "document.querySelectorAll('#shelf-list .cover').length === 2 && !document.getElementById('shelf').hidden"), true);
   check('a chronology is shown once, in the interface’s language, with the others named', await ev(tab, "[...document.querySelectorAll('#shelf-list .cover')].map(c => [c.dataset.file, [...c.querySelectorAll('.cover-languages button')].map(b => b.dataset.file + ' ' + b.textContent)])"), [['flight.en.timeline', ['flight.ru.timeline Русский']], ['big.en.timeline', []]]);
+  check('each cover links its file for download', await ev(tab, "[...document.querySelectorAll('#shelf-list .cover-download')].map(a => [a.getAttribute('href').endsWith('/library/' + a.closest('.cover').dataset.file), a.download])"), [[true, 'flight.en.timeline'], [true, 'big.en.timeline']]);
   check('covers load from the site', await chrome.until(tab, "[...document.querySelectorAll('#shelf-list img')].every(i => i.complete && i.naturalWidth > 0)"), true);
   if (shotsDir) {
     await mkdir(shotsDir, { recursive: true });

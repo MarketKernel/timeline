@@ -52,17 +52,18 @@ self.addEventListener('fetch', (event) => {
   if (!url.href.startsWith(self.registration.scope)) return;
   // From this worker's own cache only: a waiting worker's, with the next version, is there too.
   const cached = (key, options) => caches.open(CACHE).then((cache) => cache.match(key, options));
-  if (request.mode === 'navigate') {
-    event.respondWith(cached('./').then((page) => page ?? fetch(request)));
-    return;
-  }
   if (url.pathname.includes('/library/')) {
-    // The shelf's list: fresh when online, the kept copy when not. A file: kept copy first.
+    // The shelf's list: fresh when online, the kept copy when not. A file: kept copy first —
+    // downloaded by the shelf's link too, which comes as a navigation and is no page.
     if (url.pathname.endsWith('/index.json')) {
       event.respondWith(fetch(request).catch(() => kept().then((file) => file ?? Response.error())));
     } else {
       event.respondWith(kept().then((file) => file ?? fetch(request)));
     }
+    return;
+  }
+  if (request.mode === 'navigate') {
+    event.respondWith(cached('./').then((page) => page ?? fetch(request)));
     return;
   }
   event.respondWith(cached(request, { ignoreSearch: true }).then((file) => file ?? fetch(request)));

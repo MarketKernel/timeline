@@ -302,7 +302,9 @@
   "shelf": {
     "Could not download {name} — are you online?": "Не удалось загрузить «{name}» — есть ли связь?",
     "Opening {name}…": "Открываю «{name}»…",
-    "{name} could not be loaded — it is not kept offline and the network is not there.": "Не удалось загрузить «{name}»: он не сохранён для работы без сети, а сети нет.",
+    "{name} could not be loaded here: there is no network, or its site does not let the app fetch it. Download the file and open it.": "Не удалось загрузить «{name}» здесь: нет сети, или сайт, где лежит файл, не даёт приложению его получить. Скачайте файл и откройте его.",
+    "Download": "Скачать",
+    "Download the file": "Скачать файл",
     "{count} pictures": {
       "one": "{count} картинка",
       "few": "{count} картинки",

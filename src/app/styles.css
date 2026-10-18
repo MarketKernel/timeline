@@ -419,6 +419,14 @@ svg {
   gap: 6px;
 }
 
+.cover-download {
+  display: inline-block;
+  margin: 4px 12px 0;
+  font-size: 12px;
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
 .cover-remove {
   position: absolute;
   top: 6px;
