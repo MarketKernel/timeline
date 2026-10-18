@@ -56,6 +56,7 @@ export const PRESETS: readonly ScaleSpec[] = [
   { px: 1, unit: 'minute', count: 1 },
   { px: 1, unit: 'hour', count: 1 },
   { px: 1, unit: 'day', count: 1 },
+  { px: 1, unit: 'day', count: 3 },
   { px: 1, unit: 'week', count: 1 },
   { px: 1, unit: 'month', count: 1 },
   { px: 1, unit: 'season', count: 1 },

@@ -8,8 +8,9 @@
  *
  * Beside it goes build/pages/: the same page as an installable PWA for GitHub
  * Pages — a manifest, icons, a service worker that keeps it offline. Its shelf
- * shows the chronologies of a library/ folder put beside it on the site; the
- * build puts none there.
+ * shows the chronologies of a library/ folder beside it on the site: the build
+ * puts one there only when given it, `--library DIR` (the Pages workflow gives
+ * this repository's library/, a list of files kept on another site).
  *
  * The version is package.json's and nowhere else: the page shows it, writes it
  * into every file it saves (meta.generator), and the PWA's cache is named after it.
@@ -17,13 +18,15 @@
 import { build, transform } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const at = (...parts) => join(root, ...parts);
 const watch = process.argv.includes('--watch');
+const libraryAt = process.argv.indexOf('--library');
+const libraryDir = libraryAt > 0 ? resolve(process.argv[libraryAt + 1] ?? 'library') : null;
 const outFile = at('build', 'timeline.html');
 
 /** §11: the page carries code, not data, and stays small. */
@@ -125,17 +128,40 @@ export function pinScript(html) {
 const dataUri = (svg) => `data:image/svg+xml;base64,${Buffer.from(svg.replace(/<\?xml[\s\S]*?\?>/, '').trim(), 'utf8').toString('base64')}`;
 
 /**
+ * The other sites a library's index.json lists files or covers on
+ * (docs/format.md, "A library"): the PWA may reach these, and no others.
+ */
+export function libraryOrigins(index) {
+  const origins = new Set();
+  for (const entry of Array.isArray(index?.files) ? index.files : []) {
+    for (const path of [entry?.file, entry?.cover]) {
+      if (typeof path !== 'string' || !/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(path)) continue;
+      let url;
+      try {
+        url = new URL(path);
+      } catch {
+        throw new Error(`library/index.json: ${path} is not a valid address`);
+      }
+      if (url.protocol !== 'https:') throw new Error(`library/index.json: ${path} — another site must be an https:// address`);
+      origins.add(url.origin);
+    }
+  }
+  return [...origins].sort();
+}
+
+/**
  * The PWA's page may reach its own origin and nothing else: its manifest, its
  * worker, its icons, and the library files of the shelf (connect-src 'self',
- * this build only — the single file keeps 'none').
+ * this build only — the single file keeps 'none'). A library on other sites
+ * adds those sites, for its files and covers, and nothing more.
  */
-export function allowPwa(html) {
+export function allowPwa(html, origins = []) {
   const pattern = /(http-equiv="Content-Security-Policy" content=")([^"]*)/;
   if (!pattern.test(html)) throw new Error('The Content-Security-Policy meta tag is missing');
   return html.replace(pattern, (_, attr, policy) => {
     const directives = new Map(policy.split(';').map((d) => d.trim().split(/\s+/)).map(([name, ...sources]) => [name, sources]));
-    directives.get('img-src').push("'self'");
-    directives.set('connect-src', ["'self'"]);
+    directives.get('img-src').push("'self'", ...origins);
+    directives.set('connect-src', ["'self'", ...origins]);
     directives.set('manifest-src', ["'self'"]);
     directives.set('worker-src', ["'self'"]);
     return attr + [...directives].map(([name, sources]) => [name, ...sources].join(' ')).join('; ');
@@ -151,6 +177,8 @@ const PWA_ICONS = ['icon.svg', 'pwa/icon-192.png', 'pwa/icon-512.png', 'pwa/icon
  */
 async function buildPages(html) {
   const dir = at('build', 'pages');
+  const index = libraryDir ? JSON.parse(await readFile(join(libraryDir, 'index.json'), 'utf8')) : null;
+  const origins = index ? libraryOrigins(index) : [];
   const head = [
     '<link rel="manifest" href="manifest.webmanifest">',
     '<link rel="apple-touch-icon" href="apple-touch-icon.png">',
@@ -161,7 +189,7 @@ async function buildPages(html) {
     // The page registers the worker itself (update.ts): this is how it knows it is the PWA.
     '<meta name="service-worker" content="sw.js">',
   ].join('\n');
-  const page = allowPwa(html).replace('</head>', () => `${head}\n</head>`);
+  const page = allowPwa(html, origins).replace('</head>', () => `${head}\n</head>`);
   // A deploy between two releases changes the page, not the version: the hash tells them apart.
   const cache = `${release.version}-${createHash('sha256').update(page).digest('hex').slice(0, 12)}`;
   const manifest = {
@@ -194,8 +222,10 @@ async function buildPages(html) {
     // Without it Pages runs the files through Jekyll, which is only wasted time here.
     writeFile(join(dir, '.nojekyll'), '', 'utf8'),
     ...PWA_ICONS.map((path) => copyFile(at('assets', path), join(dir, basename(path)))),
+    ...(libraryDir ? [cp(libraryDir, join(dir, 'library'), { recursive: true })] : []),
   ]);
-  console.log(`build/pages/ — PWA for GitHub Pages (cache ${cache})`);
+  const shelf = index ? `, library of ${index.files?.length ?? 0} files${origins.length ? ` from ${origins.join(', ')}` : ''}` : '';
+  console.log(`build/pages/ — PWA for GitHub Pages (cache ${cache}${shelf})`);
 }
 
 async function buildOnce() {

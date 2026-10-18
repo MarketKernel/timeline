@@ -9,13 +9,17 @@
  * Problems (a file that does not open, a field the app drops, a picture or the
  * music missing, index.json disagreeing with a file) fail the run; notes (no
  * thumb for a picture) do not. docs/format.md describes both formats.
+ *
+ * A file or a cover an index lists on another site (an https:// address) is
+ * not fetched — nothing here goes to the network: check those files where they
+ * are made, and their own index there.
  */
 import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { load } from './load.mjs';
 
-const { readArchive, bytesSource, indexProblems } = await load('core/archive', 'core/zip', 'core/library');
+const { readArchive, bytesSource, indexProblems, isElsewhere } = await load('core/archive', 'core/zip', 'core/library');
 
 let problems = 0;
 const problem = (where, text) => {
@@ -46,6 +50,7 @@ async function checkFile(path) {
 /** Checks library/index.json and every file it lists. */
 async function checkLibrary(dir) {
   const indexPath = join(dir, 'index.json');
+  let elsewhere = 0;
   console.log(indexPath);
   let index;
   try {
@@ -61,8 +66,12 @@ async function checkLibrary(dir) {
     const where = `files[${i}]`;
     // indexProblems has said what is wrong with an entry that is not one: the rest of the list is still checked.
     const entry = value && typeof value === 'object' ? value : {};
-    if (typeof entry.cover === 'string' && entry.cover && !existsSync(join(dir, entry.cover))) problem(where, `the cover ${entry.cover} is not there`);
+    if (typeof entry.cover === 'string' && entry.cover && !isElsewhere(entry.cover) && !existsSync(join(dir, entry.cover))) problem(where, `the cover ${entry.cover} is not there`);
     if (typeof entry.file !== 'string') continue;
+    if (isElsewhere(entry.file)) {
+      elsewhere += 1;
+      continue;
+    }
     const path = join(dir, entry.file);
     if (!entry.file || !existsSync(path)) {
       problem(where, `the file ${entry.file} is not there`);
@@ -75,6 +84,7 @@ async function checkLibrary(dir) {
     if (Object.keys(doc.images).length !== entry.images) problem(where, `images is ${entry.images}, the file has ${Object.keys(doc.images).length}`);
     if (statSync(path).size !== entry.size) problem(where, `size is ${entry.size}, the file is ${statSync(path).size} bytes`);
   }
+  if (elsewhere) note('index.json', `${elsewhere} file${elsewhere === 1 ? ' is' : 's are'} on another site: not checked`);
 }
 
 const paths = process.argv.slice(2);

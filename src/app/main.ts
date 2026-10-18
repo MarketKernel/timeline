@@ -17,6 +17,7 @@ import { Minimap } from './minimap';
 import { setupEditing } from './editing';
 import { setupEras } from './eras';
 import { embeddedTimeline, exportPage, readEmbedded } from './export';
+import { setupInfo } from './info';
 import { setupMusic, syncMusic } from './music';
 import { applyStyle } from './look';
 import { newTimeline, setupProperties } from './properties';
@@ -465,6 +466,7 @@ function start(): void {
   }
   setupMusic((on) => updateSettings({ music: on }));
   setupProperties();
+  setupInfo();
   on('settings', () => void settingsSheet({ settings: app.settings, change: updateSettings, extra: versionBlock, readOnly: app.readOnly }));
   byId('start-settings').addEventListener('click', () => emit('settings'));
   on('start', () => {

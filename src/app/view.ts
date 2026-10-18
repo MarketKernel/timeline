@@ -97,6 +97,7 @@ const FONT_TITLE = '600 14px "Iowan Old Style", "Palatino Linotype", Charter, Ge
 const FONT_TITLE_LARGE = '600 16px "Iowan Old Style", "Palatino Linotype", Charter, Georgia, serif';
 const FONT_LINE = '400 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const FONT_BAR = '500 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT_TODAY = '700 10px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 /** Two pictures, one behind the other: the mark of a gallery. */
 export const galleryIcon = (): SVGSVGElement =>
@@ -124,10 +125,10 @@ export class Strip {
   tempAnchor: { at: { y: number; m?: number; d?: number }; label: string } | null = null;
 
   private extent: [number, number] = [0, 1];
-  /** The chronology says where it ends: the strip stops there, as it does at the start. */
-  private bounded = false;
   /** How far each event's card stands out of its dot, left and right, px: room is left for it at the ends of the strip. */
   private reach: { day: number; left: number; right: number }[] = [];
+  /** Where each period's bar runs and how wide its name is, px: a name that does not fit is written after the bar. */
+  private labels: { start: number; end: number; width: number }[] = [];
   private limits = { min: 0.0001, max: 40 };
   private ref = 0;
   private builtCenter = 0;
@@ -218,7 +219,6 @@ export class Strip {
     this.version++;
     this.barCache = null;
     this.extent = doc ? extentOf(doc) : [0, 1];
-    this.bounded = doc?.end !== undefined;
     this.reach = (doc?.items ?? [])
       .filter((item) => item.kind === 'event' && this.visibleItem(item))
       .map((item) => {
@@ -229,6 +229,20 @@ export class Strip {
         if (item.shape === 'round') return { day, left: discOf(size) / 2 - shift, right: discOf(size) / 2 + shift };
         return { day, left: CARD_INSET - shift, right: CARD_SIZES[size].width - CARD_INSET + shift };
       });
+    // The today label stands to the right of its line: at a strip that ends today it needs room after the end.
+    const today = todayDay() + 0.5;
+    if (doc && today >= this.extent[0] && today <= this.extent[1] + 1) {
+      const label = t('strip', 'Today').toUpperCase();
+      this.reach.push({ day: today, left: 0, right: 4 + textWidth(label, FONT_TODAY) + label.length + 24 });
+    }
+    // A period too short for its name has it written after its end: that needs room too, at a zoom.
+    const now = new Date();
+    this.labels = (doc?.items ?? [])
+      .filter((item) => item.kind === 'period' && item.end)
+      .map((item) => {
+        const [start, end] = spanOf(item, now);
+        return { start, end, width: textWidth(item.title, FONT_BAR) + 12 };
+      });
     this.limits = zoomLimits(this.extent[1] - this.extent[0]);
     this.scheduleBuild();
   }
@@ -236,7 +250,8 @@ export class Strip {
   /**
    * The paper before the start and after the end at a zoom: 40 px, or more
    * where the card of an event near an end reaches further — a huge card of
-   * the last event needs its whole width after it.
+   * the last event needs its whole width after it — or the today label, or
+   * the name written after a short bar.
    */
   margins(pxPerDay: number): [number, number] {
     // Asked at every frame of a pan, at the one zoom: worked out once for it.
@@ -248,6 +263,10 @@ export class Strip {
     for (const r of this.reach) {
       before = Math.max(before, r.left + CARD_ROOM - (r.day - lo) * pxPerDay);
       after = Math.max(after, r.right + CARD_ROOM - (hi - r.day) * pxPerDay);
+    }
+    for (const l of this.labels) {
+      const bar = (l.end - l.start) * pxPerDay;
+      if (bar < l.width) after = Math.max(after, l.width + CARD_ROOM - (hi - l.end) * pxPerDay);
     }
     this.marginsAt = { version: this.version, px: pxPerDay, value: [before, after] };
     return [before, after];
@@ -290,9 +309,9 @@ export class Strip {
   setView(next: View, settle = true): void {
     const width = this.view.width;
     let view: View = { ...next, width, pxPerDay: clamp(next.pxPerDay, this.limits.min, this.limits.max) };
-    // Without an end the strip runs on a screen past its last date; with one it stops at the margin, as at the start.
+    // The strip stops at its last date as it does at the first: a margin of paper for the cards, then nothing.
     const [before, after] = this.margins(view.pxPerDay);
-    view = clampCenter(view, this.extent[0], this.extent[1], before, this.bounded ? after : Math.max(after, width));
+    view = clampCenter(view, this.extent[0], this.extent[1], before, after);
     const zoomed = view.pxPerDay !== this.view.pxPerDay;
     this.view = view;
     if (zoomed || this.outsideBuilt()) this.scheduleBuild();
@@ -381,7 +400,7 @@ export class Strip {
       this.inertia.velocity *= Math.pow(0.94, dt / 16);
       const before = this.view.center;
       this.setView({ ...this.view, center: this.view.center - (this.inertia.velocity * dt) / this.view.pxPerDay }, false);
-      // Stopped by friction, or by the soft stop at the extent ± one screen.
+      // Stopped by friction, or by either end of the strip.
       if (Math.abs(this.inertia.velocity) < 0.02 || this.view.center === before) {
         this.inertia = null;
         this.settle();
@@ -433,8 +452,8 @@ export class Strip {
       this.startX = startX;
       this.root.style.setProperty('--start-x', startX);
     }
-    // And where it ends, counted from the right edge — when it has an end; otherwise it runs on.
-    const endX = this.bounded ? `${Math.max(0, Math.round(this.view.width - offset - this.lx(this.extent[1])))}px` : '0px';
+    // And where it ends, counted from the right edge.
+    const endX = `${Math.max(0, Math.round(this.view.width - offset - this.lx(this.extent[1])))}px`;
     if (endX !== this.endX) {
       this.endX = endX;
       this.root.style.setProperty('--end-x', endX);

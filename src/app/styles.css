@@ -520,6 +520,38 @@ svg {
   color: var(--ink-faint);
 }
 
+/* About this timeline: the title, then who made it and when, a label to each line. */
+.doc-info-title {
+  font: 600 1.05rem/1.3 var(--serif);
+  color: var(--ink);
+}
+
+.doc-info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 12px 0 4px;
+}
+
+.doc-info dt {
+  color: var(--ink-faint);
+}
+
+.doc-info dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.doc-info a {
+  color: var(--accent);
+}
+
+.doc-info-none {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
 body.dropping::after {
   content: '';
   position: fixed;
@@ -549,9 +581,9 @@ body.dropping::after {
 }
 
 .doc-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  margin: 0 8px 0 0;
+  margin: 0;
   font: 600 1.05rem/1.2 var(--serif);
   white-space: nowrap;
   overflow: hidden;
@@ -581,7 +613,13 @@ body.dropping::after {
   flex: none;
 }
 
+/* About this timeline: right after the title, however long the title is; the zoom keeps to the right. */
+.doc-info-button {
+  margin-right: 8px;
+}
+
 .toolbar-zoom {
+  margin-left: auto;
   margin-right: 8px;
 }
 
@@ -1060,7 +1098,7 @@ body.resizing .card-resize {
   content: '';
   position: absolute;
   /* The axis, the era band and the rulers begin at the first date (--start-x, set by view.ts)
-     and, when the chronology has an end, stop at it (--end-x, from the right). */
+     and stop at the last (--end-x, from the right). */
   left: var(--start-x, 0px);
   right: var(--end-x, 0px);
   top: 50%;
@@ -3315,6 +3353,11 @@ body.dragging .bar {
   .toolbar-zoom #zoom-out,
   .toolbar-zoom #zoom-in {
     display: none;
+  }
+
+  /* Every pixel here is the title's. */
+  .doc-info-button {
+    margin-right: 0;
   }
 }
 

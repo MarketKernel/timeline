@@ -28,6 +28,27 @@ check(
   ],
 );
 
+check(
+  'a file and a cover: beside index.json, or an https:// address elsewhere',
+  indexProblems({
+    format: 'timeline-library',
+    files: [
+      entry('far', 'en', { file: 'https://example.org/far.en.timeline', cover: 'https://example.org/covers/far.webp' }),
+      entry('far', 'ru', { file: 'http://example.org/far.ru.timeline' }),
+      entry('far', 'de', { cover: '//example.org/far.webp' }),
+    ],
+  }),
+  [
+    { where: 'files[1]', text: 'file must be a path relative to library/ or an https:// address' },
+    { where: 'files[2]', text: 'cover must be a path relative to library/ or an https:// address' },
+  ],
+);
+check(
+  'a collection of pictures may leave span empty, a chronology may not',
+  indexProblems({ format: 'timeline-library', files: [entry('pictures', 'en', { items: 0, images: 24, span: '' }), entry('events', 'en', { span: '' })] }),
+  [{ where: 'files[1]', text: 'span must be a non-empty string' }],
+);
+
 check('a broken entry is said once, not as a repeat too', indexProblems({ format: 'timeline-library', files: [null, null] }).filter((p) => p.text.startsWith('a second')), []);
 
 done('library');

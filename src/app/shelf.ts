@@ -9,6 +9,10 @@
  * it once, in the interface's language where there is such a file, and names
  * the other languages under it.
  *
+ * index.json may list files and covers on another site, by https:// address
+ * (docs/format.md, "A library"): they are fetched from there, and kept offline
+ * the same way.
+ *
  * From file:// there is no shelf — that page has no server beside it.
  */
 
@@ -22,11 +26,16 @@ import { isPwa } from './update';
 
 const LIBRARY = 'timeline-library';
 const base = () => new URL('library/', location.href);
+/** Where a file or a cover is: beside index.json, or at its own address elsewhere. */
+const at = (path: string): string => new URL(path, base()).href;
+/** The name a shelf file opens under: its own, not the address it came from. */
+const fileName = (path: string): string => new URL(at(path)).pathname.split('/').pop() || path;
 
+/** The addresses kept offline. */
 async function kept(): Promise<Set<string>> {
   try {
     const cache = await caches.open(LIBRARY);
-    return new Set((await cache.keys()).map((request) => new URL(request.url).pathname.split('/').pop() ?? ''));
+    return new Set((await cache.keys()).map((request) => request.url));
   } catch {
     return new Set();
   }
@@ -34,13 +43,13 @@ async function kept(): Promise<Set<string>> {
 
 async function keepOffline(entry: LibraryEntry, keep: boolean): Promise<boolean> {
   const cache = await caches.open(LIBRARY);
-  const urls = [new URL(entry.file, base()).href, ...(entry.cover ? [new URL(entry.cover, base()).href] : [])];
+  const urls = [at(entry.file), ...(entry.cover ? [at(entry.cover)] : [])];
   if (!keep) {
     for (const url of urls) await cache.delete(url);
     return true;
   }
   try {
-    await cache.addAll([...urls, new URL('index.json', base()).href]);
+    await cache.addAll([...urls, at('index.json')]);
     // Kept files must survive the browser's tidying when space runs short.
     void navigator.storage?.persist?.();
     return true;
@@ -53,11 +62,11 @@ async function keepOffline(entry: LibraryEntry, keep: boolean): Promise<boolean>
 async function open(entry: LibraryEntry): Promise<void> {
   const close = toast(t('shelf', 'Opening {name}…', { name: entry.title }), { duration: 0 });
   try {
-    const response = await fetch(new URL(entry.file, base()));
+    const response = await fetch(at(entry.file));
     if (!response.ok) throw new Error(String(response.status));
     const blob = await response.blob();
     close();
-    await openFile(new File([blob], entry.file, { type: 'application/zip' }), null, true);
+    await openFile(new File([blob], fileName(entry.file), { type: 'application/zip' }), null, true);
   } catch {
     close();
     toast(t('shelf', '{name} could not be loaded — it is not kept offline and the network is not there.', { name: entry.title }), { kind: 'error' });
@@ -75,7 +84,7 @@ export async function renderShelf(): Promise<void> {
   }
   let entries: LibraryEntry[];
   try {
-    const response = await fetch(new URL('index.json', base()));
+    const response = await fetch(at('index.json'));
     entries = ((await response.json()) as { files: LibraryEntry[] }).files;
   } catch {
     section.hidden = true;
@@ -85,7 +94,7 @@ export async function renderShelf(): Promise<void> {
   const list = byId('shelf-list');
   list.replaceChildren(
     ...shelfGroups(entries, language()).map(({ shown: entry, others }) => {
-      const box = h('input', { type: 'checkbox', checked: offline.has(entry.file) });
+      const box = h('input', { type: 'checkbox', checked: offline.has(at(entry.file)) });
       box.addEventListener('change', async () => {
         box.disabled = true;
         const ok = await keepOffline(entry, box.checked);
@@ -99,7 +108,7 @@ export async function renderShelf(): Promise<void> {
         h(
           'button',
           { class: 'cover-open', type: 'button', title: entry.description, lang: entry.lang, onclick: () => void open(entry) },
-          entry.cover ? h('img', { class: 'cover-image', src: new URL(entry.cover, base()).href, alt: '' }) : h('span', { class: 'cover-image cover-image--empty' }),
+          entry.cover ? h('img', { class: 'cover-image', src: at(entry.cover), alt: '' }) : h('span', { class: 'cover-image cover-image--empty' }),
           h('span', { class: 'cover-title' }, entry.title),
           h('span', { class: 'cover-meta' }, meta),
         ),

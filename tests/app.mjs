@@ -200,7 +200,7 @@ try {
   check('0 fits all again', await ev(tab, "document.querySelectorAll('.era').length"), 6);
   // The scale picker offers the presets and nothing else — only those the file can be shown at.
   await chrome.click(tab, '#scale');
-  check('the scale menu for two centuries of flight: a pixel a minute … a pixel a year, ten years (25 px) and coarser not offered', await chrome.until(tab, "[...document.querySelectorAll('.menu--scale .menu-item')].map(b => b.textContent.trim()).join('|') === '1 px = 1 minute|1 px = 1 hour|1 px = 1 day|1 px = 1 week|1 px = 1 month|1 px = 1 season|1 px = 1 year' && !document.querySelector('.menu--scale input')"), true);
+  check('the scale menu for two centuries of flight: a pixel a minute … a pixel a year, ten years (25 px) and coarser not offered', await chrome.until(tab, "[...document.querySelectorAll('.menu--scale .menu-item')].map(b => b.textContent.trim()).join('|') === '1 px = 1 minute|1 px = 1 hour|1 px = 1 day|1 px = 3 days|1 px = 1 week|1 px = 1 month|1 px = 1 season|1 px = 1 year' && !document.querySelector('.menu--scale input')"), true);
   await ev(tab, "[...document.querySelectorAll('.menu--scale .menu-item')].find(b => b.textContent.trim() === '1 px = 1 year').click()");
   check('…a pick zooms to it, and the button says so', await chrome.until(tab, "document.getElementById('scale').textContent === '1 px = 1 year'"), true);
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: '0', code: 'Digit0', text: '0', windowsVirtualKeyCode: 48 }, tab);
@@ -260,6 +260,12 @@ try {
   await ev(tab, "[...document.querySelectorAll('.menu-item')].find(b => b.textContent === 'About Timeline').click()");
   check('…it shows the version and links to the project', await chrome.until(tab, `(() => { const d = document.querySelector('dialog[open] .about'); return !!d && d.textContent.includes(${JSON.stringify(version)}) && d.querySelector('.home-link')?.href === ${JSON.stringify(homepage)}; })()`), true);
   await shot(tab, '22-about');
+  await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  await chrome.until(tab, "!document.querySelector('dialog[open]')");
+
+  // About this timeline: the ⓘ after the title — the sample says when it was made, not who made it.
+  await chrome.click(tab, '#doc-info');
+  check('ⓘ shows the author, contact, website and date created, each "Not specified" when the file lacks it', await chrome.until(tab, "!!document.querySelector('dialog[open] .doc-info')") && (await ev(tab, "[...document.querySelectorAll('dialog[open] .doc-info dd')].map(d => d.textContent)")), ['Not specified', 'Not specified', 'Not specified', '13\u00a0Oct\u00a02026']);
   await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
   await chrome.until(tab, "!document.querySelector('dialog[open]')");
 
@@ -476,6 +482,9 @@ try {
   await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 2 }, tab);
   check('…undo makes it large again', await chrome.until(tab, "timeline.session.doc.items.find(i => i.id === 'gagarin-flight').size === 'large'"), true);
 
+  // Without an end of its own the strip stops at its last item just the same: room for the cards there, no years of empty ruler.
+  check('without an end the strip stops at its last item', await ev(tab, "(() => { const keep = timeline.strip.view; timeline.strip.setView({ ...keep, center: 1e8 }, false); const v = timeline.strip.view; const ok = !timeline.session.doc.end && Math.abs(v.center + v.width / 2 / v.pxPerDay - (timeline.strip.extentDays[1] + timeline.strip.margins(v.pxPerDay)[1] / v.pxPerDay)) < 1 / v.pxPerDay; timeline.strip.setView(keep); return ok; })()"), true);
+
   // The timeline's own settings: another paper, squares, sans titles, an end at today — previewed live, kept in the file, undone and redone.
   check('the pencil on the edit bar opens the timeline settings, not the menu', await ev(tab, "!document.getElementById('timeline-settings').closest('[hidden]')"), true);
   await chrome.click(tab, '#timeline-settings');
@@ -670,6 +679,10 @@ try {
     await chrome.click(reader, '#more');
     check(`${label}: the menu has printing, settings and About only`, await ev(reader, "[...document.querySelectorAll('.menu-item')].map(b => b.textContent)"), ['Print or save as PDF', 'Settings', 'About Timeline']);
     await ev(reader, "document.querySelector('.menu-item').closest('.menu') && document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+    await chrome.click(reader, '#doc-info');
+    check(`${label}: ⓘ tells who made it and when`, await chrome.until(reader, "document.querySelector('dialog[open] .doc-info')?.textContent.includes('2026')"), true);
+    await ev(reader, "document.querySelector('dialog[open] .button--primary').click()");
+    await chrome.until(reader, "!document.querySelector('dialog[open]')");
     await chrome.click(reader, '.card');
     check(`${label}: a card opens its details, with no Edit`, await chrome.until(reader, "!document.getElementById('details').hidden && ![...document.querySelectorAll('#details button')].some(b => b.textContent === 'Edit')"), true);
     check(`${label}: the music plays`, await chrome.until(reader, "document.getElementById('music-toggle').dataset.state === 'playing'", 5000), true);

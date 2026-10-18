@@ -10,7 +10,8 @@
  *
  * Library files live in a cache of their own, LIBRARY, that no deploy deletes:
  * what the reader kept offline stays kept. They are put there by the page
- * (shelf.ts), and read from there first.
+ * (shelf.ts), and read from there first — those the library lists on another
+ * site too, the only requests elsewhere the page's policy lets through.
  */
 const CACHE = 'timeline-__CACHE__';
 const LIBRARY = 'timeline-library';
@@ -43,6 +44,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
+  const kept = () => caches.open(LIBRARY).then((cache) => cache.match(request, { ignoreSearch: true }));
+  if (url.origin !== self.location.origin) {
+    event.respondWith(kept().then((file) => file ?? fetch(request)));
+    return;
+  }
   if (!url.href.startsWith(self.registration.scope)) return;
   // From this worker's own cache only: a waiting worker's, with the next version, is there too.
   const cached = (key, options) => caches.open(CACHE).then((cache) => cache.match(key, options));
@@ -51,12 +57,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.pathname.includes('/library/')) {
-    const kept = caches.open(LIBRARY).then((cache) => cache.match(request, { ignoreSearch: true }));
     // The shelf's list: fresh when online, the kept copy when not. A file: kept copy first.
     if (url.pathname.endsWith('/index.json')) {
-      event.respondWith(fetch(request).catch(() => kept.then((file) => file ?? Response.error())));
+      event.respondWith(fetch(request).catch(() => kept().then((file) => file ?? Response.error())));
     } else {
-      event.respondWith(kept.then((file) => file ?? fetch(request)));
+      event.respondWith(kept().then((file) => file ?? fetch(request)));
     }
     return;
   }

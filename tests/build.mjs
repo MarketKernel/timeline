@@ -3,7 +3,7 @@
  * the build, and the policy must pin the one script by its hash.
  */
 import { createHash } from 'node:crypto';
-import { assertSelfContained, pinScript } from '../build.mjs';
+import { allowPwa, assertSelfContained, libraryOrigins, pinScript } from '../build.mjs';
 import { checker } from '../tools/load.mjs';
 
 const { check, done } = checker();
@@ -40,5 +40,18 @@ const hash = createHash('sha256').update(code).digest('base64');
 check('pins the script by its hash', pinned.includes(`script-src 'sha256-${hash}'`), true);
 check('no unsafe-inline left', pinned.includes("'unsafe-inline'"), false);
 check('two scripts are refused', throws(() => pinScript(page('<script>1</script><script>2</script>'))), true);
+
+const policy = "default-src 'none'; img-src blob: data:; connect-src 'none'";
+const pwa = (origins) => /content="([^"]*)"/.exec(allowPwa(page('', policy), origins))?.[1];
+check('the PWA reaches its own site', pwa([]), "default-src 'none'; img-src blob: data: 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'");
+check('…and the sites its library names, for files and covers', pwa(['https://a.example']), "default-src 'none'; img-src blob: data: 'self' https://a.example; connect-src 'self' https://a.example; manifest-src 'self'; worker-src 'self'");
+const library = (...files) => ({ format: 'timeline-library', files });
+check(
+  'a library’s sites: each once, beside index.json not among them',
+  libraryOrigins(library({ file: 'https://b.example/x.timeline', cover: 'https://a.example/c/x.webp' }, { file: 'https://b.example/y.timeline', cover: null }, { file: 'z.timeline', cover: 'covers/z.webp' })),
+  ['https://a.example', 'https://b.example'],
+);
+check('a site over http is refused', throws(() => libraryOrigins(library({ file: 'http://a.example/x.timeline' }))), true);
+check('no library, no sites', libraryOrigins(null), []);
 
 done('build');

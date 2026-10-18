@@ -21,6 +21,11 @@ try {
   check('the test library passes', [good.status, good.stdout.trim().split('\n').pop()], [0, 'all good']);
 
   const index = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8'));
+  const far = { ...index.files[0], id: 'far-en', group: 'far', file: 'https://example.org/far.en.timeline', cover: 'https://example.org/far.webp' };
+  await writeFile(join(dir, 'index.json'), JSON.stringify({ ...index, files: [...index.files, far] }));
+  const elsewhere = run(dir);
+  check('a file on another site is not fetched, and the run says so', [elsewhere.status, /1 file is on another site: not checked/.test(elsewhere.stdout)], [0, true]);
+
   index.files[0].lang = 'de';
   index.files[1].file = 'gone.timeline';
   await writeFile(join(dir, 'index.json'), JSON.stringify(index));

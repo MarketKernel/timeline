@@ -130,7 +130,9 @@ at that date.
   the page cannot fetch anything, anywhere. Its one inline script is pinned by hash.
   Images and the background music are played from `blob:` URLs read out of the open file
   (`img-src blob: data:`, `media-src blob:`).
-- The PWA allows its own origin only (`connect-src 'self'`) — for the shelf's files.
+- The PWA allows its own origin (`connect-src 'self'`) — for the shelf's files — and the
+  sites its library lists files on, which the build reads from the library's `index.json`
+  (`connect-src` and `img-src` only). With no library on another site, its own origin only.
 - An SVG inside a file is shown only through `<img>`, where its scripts never run; links in
   texts open in a new tab and are never fetched by the page.
 - Photos you add are re-encoded through a canvas: the EXIF date is read first (to place
@@ -214,9 +216,12 @@ whatever the last deploy put there, while a downloaded file stays the version it
 version fixed on disk, take `timeline-<tag>.html` from a release and compare it with
 `SHA256SUMS.txt`.
 
-The PWA can show a shelf of chronologies put beside it on the site (`library/index.json`
-and the files it lists); the build puts none there. [docs/format.md](docs/format.md#a-library)
-describes a library, and `node tools/check.mjs library/` checks one.
+The PWA can show a shelf of chronologies beside it on the site (`library/index.json` and
+the files it lists). `npm run build` puts none there; `npm run build -- --library DIR` copies
+`DIR` to `build/pages/library/`. The Pages workflow builds with this repository's `library/`:
+an `index.json` whose files and covers are on another site, by https:// address.
+[docs/format.md](docs/format.md#a-library) describes a library, and
+`node tools/check.mjs library/` checks one.
 
 ## Layout
 
@@ -243,9 +248,11 @@ describes a library, and `node tools/check.mjs library/` checks one.
 | `src/app/session.ts`, `files.ts`, `recent.ts` | opening, saving, drafts, recent files |
 | `src/app/export.ts`, `source.ts` | Export as a web page: this page as it was loaded, with the timeline inside; opening it read-only |
 | `src/app/shelf.ts`, `update.ts`, `src/pwa/sw.js` | the PWA: the shelf, updates, the service worker |
+| `src/app/info.ts` | About this timeline, the ⓘ after the title: author, contact, website, date created |
 | `src/app/properties.ts`, `look.ts` | Timeline settings and New timeline: the file's texts, cover, dates, opening scale and look; the look on the page |
 | `src/app/music.ts` | a timeline's background music: playing, fading, pausing, the toolbar's speaker |
 | `src/app/main.ts`, `settings.ts`, `ui.ts` | start-up, toolbar, settings, toasts and dialogs |
+| `library/index.json` | the shelf of this repository's GitHub Pages: chronologies kept on another site, by address (`npm run build -- --library library`) |
 | `assets/` | the icon and the PWA's icons (`tools/icons.mjs` renders them from `icon.svg`) |
 | `tools/` | `check` (files and libraries, as the app reads them), `shots`, `icons`, `i18n`, `chrome` (DevTools protocol), `load` (src/ for Node), `sample` (test files) |
 | `docs/format.md` | the `.timeline` file and a library, for whoever makes them |

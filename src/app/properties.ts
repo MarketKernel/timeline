@@ -375,7 +375,7 @@ function settingsForm(doc: Doc, session: Session) {
     h('div', { class: 'form-pair form-pair--even' }, field(t('properties', 'Begins'), startMode), field(t('properties', 'Ends'), endMode)),
     startDate.el,
     endDate.el,
-    hint(t('properties', 'With an end the strip stops there, as it does at the beginning; without one it runs on.')),
+    hint(t('properties', 'The strip begins and ends there; an item outside is never cut off — the strip widens to it.')),
     field(t('properties', 'Opens at the scale'), scale, hint(t('properties', 'A reader who has opened it before comes back to where they left off.'))),
     section(t('properties', 'Look')),
     paper.el,

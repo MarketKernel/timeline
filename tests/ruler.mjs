@@ -10,7 +10,7 @@ const NB = ' ';
 
 // Scale.
 check('1 px = 1 year', pxPerDayOf({ px: 1, unit: 'year', count: 1 }), 1 / YEAR_DAYS);
-check('the presets, a pixel for a unit each, from a day to a million years', PRESETS.map(specText), ['1 px = 1 minute', '1 px = 1 hour', '1 px = 1 day', '1 px = 1 week', '1 px = 1 month', '1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 century', '1 px = 1,000 years', '1 px = 10,000 years', '1 px = 100,000 years', '1 px = 1 million years']);
+check('the presets, a pixel for a unit each, from a day to a million years', PRESETS.map(specText), ['1 px = 1 minute', '1 px = 1 hour', '1 px = 1 day', '1 px = 3 days', '1 px = 1 week', '1 px = 1 month', '1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 century', '1 px = 1,000 years', '1 px = 10,000 years', '1 px = 100,000 years', '1 px = 1 million years']);
 check('a pixel a minute is the finest zoom', pxPerDayOf(PRESETS[0]), MAX_PX_PER_DAY);
 const offered = (years) => presetsFor(years * YEAR_DAYS).map(specText).at(-1);
 check('only the presets that leave a chronology 100 px: a life, flight, six thousand years of history, the Earth', [offered(40), offered(250), offered(6000), offered(4.5e9)], ['1 px = 1 season', '1 px = 1 year', '1 px = 10 years', '1 px = 1 million years']);
@@ -26,7 +26,7 @@ check('describe 1 px/century', describeScale(1 / (YEAR_DAYS * 100)), { px: 1, un
 check('describe 1 px/2.5 centuries', describeScale(1 / (YEAR_DAYS * 250)), { px: 1, unit: 'century', count: 2.5 });
 check('nearest preset to 0.9 px/day', nearestPreset(0.9), { px: 1, unit: 'day', count: 1 });
 check('finer than a pixel a day: a pixel an hour', stepPreset(1, 1), { px: 1, unit: 'hour', count: 1 });
-check('step coarser from 1 px/day', stepPreset(1, -1), { px: 1, unit: 'week', count: 1 });
+check('step coarser from 1 px/day: 3 days, then a week', [stepPreset(1, -1), stepPreset(1 / 3, -1)], [{ px: 1, unit: 'day', count: 3 }, { px: 1, unit: 'week', count: 1 }]);
 check('step coarser from 1 px/year', stepPreset(1 / YEAR_DAYS, -1), { px: 1, unit: 'year', count: 10 });
 check('no step finer than the finest', stepPreset(MAX_PX_PER_DAY, 1), null);
 {

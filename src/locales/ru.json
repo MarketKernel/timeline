@@ -229,7 +229,8 @@
     "Edit mode": "Режим правки",
     "More": "Ещё",
     "Background music: {title}": "Фоновая музыка: {title}",
-    "Background music": "Фоновая музыка"
+    "Background music": "Фоновая музыка",
+    "About this timeline": "О хронологии"
   },
   "menu": {
     "Save": "Сохранить",
@@ -501,7 +502,7 @@
     "Time": "Время",
     "Begins": "Начало",
     "Ends": "Конец",
-    "With an end the strip stops there, as it does at the beginning; without one it runs on.": "Если конец задан, лента обрывается на нём, как и в начале; без него она продолжается дальше.",
+    "The strip begins and ends there; an item outside is never cut off — the strip widens to it.": "Здесь лента начинается и заканчивается; элемент за её пределами не обрезается — лента расширяется до него.",
     "Opens at the scale": "Масштаб при открытии",
     "The beginning is not a date.": "Начало — не дата.",
     "The end is not a date.": "Конец — не дата.",
@@ -576,5 +577,13 @@
     "About Timeline": "О программе Timeline",
     "A chronology viewer and editor in one HTML file. It works from a disk and never touches the network.": "Просмотр и правка хронологий в одном HTML-файле. Работает с диска и никогда не обращается к сети.",
     "Version": "Версия"
+  },
+  "info": {
+    "About this timeline": "О хронологии",
+    "Author": "Автор",
+    "Contact": "Контакты",
+    "Website": "Сайт",
+    "Created": "Создана",
+    "Not specified": "Не указано"
   }
 }

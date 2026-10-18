@@ -19,7 +19,8 @@ disagree, the code is right and this page is a bug.
   the pictures and the music it uses.
 - A file is written in **one language**. The same chronology in Russian is another file.
 - A **library** is a folder `library/` next to the PWA's `index.html` on a website:
-  `.timeline` files, their covers and `index.json`, which lists them. The PWA's start
+  `.timeline` files, their covers and `index.json`, which lists them — or lists files kept
+  on another site, by address. The PWA's start
   screen shows it as a shelf. The single-file `timeline.html` has no shelf: it opens files
   from the disk.
 - Timeline itself contains no chronologies. Files are made elsewhere: by hand, by a
@@ -100,7 +101,7 @@ app never shows a blank screen for one mistake.
 | `title` | string | The chronology's name. "Untitled" when left out. |
 | `description` | string | What it is about, a sentence or two. Kept in the file and edited in Timeline settings. |
 | `sources` | string | Where the dates come from. Kept with the file; the app does not show it. |
-| `author` | object | Who made the chronology, every part optional: `name`, `url` (their website, `https://…` or `http://…`), `contact` (an e-mail, a phone, a handle — as written). Edited in Timeline settings. |
+| `author` | object | Who made the chronology, every part optional: `name`, `url` (their website, `https://…` or `http://…`), `contact` (an e-mail, a phone, a handle — as written). Edited in Timeline settings; a reader sees it under ⓘ beside the title. |
 | `start`, `end` | [date](#dates) | Where the chronology begins and ends, if not at its first and last item. `end` may be `{ "now": true }`. |
 | `cover` | image hash | The picture that stands for the file in Recent. It must be in `images`. |
 | `anchor` | object | The second ruler: years counted from a date or an item. See below. |
@@ -116,7 +117,7 @@ app never shows a blank screen for one mistake.
 | --- | --- | --- |
 | `id` | `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$` | The file's identity. Make it unique per file **and per language** (`moon-en`, `moon-ru`). The app remembers a reader's position and unsaved drafts by it. |
 | `kind` | `"history"` \| `"life"` | `history` (the default) opens on the whole chronology. `life` opens at today, with weeks on the ruler. |
-| `created`, `modified` | string | Dates, `"2026-10-17"`. The app sets `modified` on save. |
+| `created`, `modified` | string | Dates, `"2026-10-17"`. The app sets `created` when it makes a file and `modified` on save; ⓘ beside the title shows `created`. |
 | `generator` | string | What wrote the file: `"timeline 0.1.0"`, `"my-script 2"`. |
 
 ## Dates
@@ -403,25 +404,47 @@ library/
 | `id` | string | Unique in the list. Use the file's `meta.id`. |
 | `group` | string | The chronology this file is one language of: the same for `moon.en` and `moon.ru`. One cover per group on the shelf. |
 | `lang` | string | The file's `lang`. Which file a reader sees: their interface's language, else English, else the first in the list. |
-| `file` | path | The `.timeline`, relative to `library/`. |
+| `file` | path or address | The `.timeline`, relative to `library/`, or an `https://` address on another site (see [Files on another site](#files-on-another-site)). |
 | `title` | string | Under the cover, in the file's language. |
 | `description` | string | The cover's tooltip. May be empty. |
 | `kind` | `history` \| `life` | The file's `meta.kind`. |
-| `span` | string | Shown under the title as it is: write it in the file's language (`"1957 – now"`, `"1957 – сейчас"`). |
+| `span` | string | Shown under the title as it is: write it in the file's language (`"1957 – now"`, `"1957 – сейчас"`). May be empty when `items` is `0`: such a file shows its picture count instead. |
 | `items` | integer | The number of items, shown as "42 items". If `0`, the shelf shows `images` as "12 pictures" instead, which suits a file that is a collection of pictures. |
 | `images` | integer | The number of entries in the file's `images`. |
 | `size` | integer | The file's size in bytes, shown beside "Keep offline". |
-| `cover` | path or `null` | A picture relative to `library/` (WebP, PNG, JPEG or SVG). The shelf shows it 3 : 2, cropped to fill; 480 × 320 px is plenty. `null` shows a plain cover. |
+| `cover` | path, address or `null` | A picture relative to `library/`, or an `https://` address (WebP, PNG, JPEG or SVG). The shelf shows it 3 : 2, cropped to fill; 480 × 320 px is plenty. `null` shows a plain cover. |
+
+### Files on another site
+
+`index.json` itself is always `library/index.json` beside the PWA, but the files and covers
+it lists may be on another site, by full address:
+
+```json
+"file": "https://timelines.example.org/moon.en.timeline",
+"cover": "https://timelines.example.org/covers/moon-en.webp"
+```
+
+- **https:// only**, and the other site must allow it: every file and cover needs the
+  header `Access-Control-Allow-Origin: *` (or the PWA's own origin). Without it the shelf
+  cannot open the file or keep it offline.
+- **The PWA is built for those sites.** It may fetch only what its policy names, so the build
+  reads the library's `index.json` and adds every site it finds there to `connect-src` and
+  `img-src` (`npm run build -- --library library/`). A site added to `index.json` later,
+  without a new build, is not reachable.
+- "Keep offline" works the same way: the file is stored in the browser and read from there
+  first.
+- `tools/check.mjs` does not fetch them: check the files where they are made.
 
 ### Publishing and updating
 
-- **Same site only.** The PWA may fetch only from its own origin, so the library must be
-  served from the same site as the PWA. A library elsewhere is not reachable.
+- **Same site, or a site the build was told about.** The PWA fetches from its own origin,
+  and from the other sites its library's `index.json` lists files on (above). `index.json`
+  itself must be beside the PWA.
 - **This repository's GitHub Pages:** `npm run build` empties `build/pages/`, and the
-  Pages workflow (`.github/workflows/pages.yml`) uploads that folder as it is. To publish
-  a library there, add a step that copies your `library/` into `build/pages/library/`
-  after the build and before the upload. Your own server: put `library/` beside
-  `index.html`.
+  Pages workflow (`.github/workflows/pages.yml`) uploads that folder as it is. It builds with
+  `--library library`, which copies this repository's `library/` into
+  `build/pages/library/` and lets the page reach the sites its `index.json` names. Your own
+  server: put `library/` beside `index.html`, or build with `--library` as well.
 - **"Keep offline"** stores a file in the browser, and the stored copy is used first
   after that. `index.json` is always fetched fresh when online. **To publish a changed
   file, give it a new name** (`moon.en.2.timeline`) and point `index.json` at it, or
