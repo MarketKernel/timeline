@@ -13,7 +13,8 @@ ordinary images. The page holds no data at all, never touches the network, and w
 disk.
 
 - **The file**: `build/timeline.html` — download it, double-click it, open a `.timeline`.
-- **The app**: the same page as a PWA on GitHub Pages, installable and offline.
+- **The app**: the same page as a PWA, installable and offline, with a shelf of
+  chronologies — [time.marketkernel.com](https://time.marketkernel.com/).
 
 ## Using it
 
@@ -208,7 +209,8 @@ The release workflow stops if the tag and `package.json` disagree, then attaches
 
 ## GitHub Pages
 
-`.github/workflows/pages.yml` runs `test.yml` on every push to `main`, then builds and deploys
+The app at [time.marketkernel.com](https://time.marketkernel.com/) is this repository's
+GitHub Pages. `.github/workflows/pages.yml` runs `test.yml` on every push to `main`, then builds and deploys
 `build/pages/` to GitHub Pages (Settings → Pages → Source: GitHub Actions). Each deploy
 changes the cache name in `sw.js`, so the browser picks up the new worker by itself; the
 installed app downloads the new version and waits for Update. An installed PWA runs

@@ -20,8 +20,8 @@ disagree, the code is right and this page is a bug.
 - A file is written in **one language**. The same chronology in Russian is another file.
 - A **library** is a folder `library/` next to the PWA's `index.html` on a website:
   `.timeline` files, their covers and `index.json`, which lists them — or lists files kept
-  on another site, by address. The PWA's start
-  screen shows it as a shelf. The single-file `timeline.html` has no shelf: it opens files
+  on another site, by address. The PWA's start screen shows it as a shelf, as at
+  [time.marketkernel.com](https://time.marketkernel.com/). The single-file `timeline.html` has no shelf: it opens files
   from the disk.
 - Timeline itself contains no chronologies. Files are made elsewhere: by hand, by a
   script or by an agent, or in the app ("New timeline", then Save).
