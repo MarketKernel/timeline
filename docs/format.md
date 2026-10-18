@@ -414,6 +414,8 @@ library/
 | `size` | integer | The file's size in bytes, shown beside "Keep offline". |
 | `cover` | path, address or `null` | A picture relative to `library/`, or an `https://` address (WebP, PNG, JPEG or SVG). The shelf shows it 3 : 2, cropped to fill; 480 × 320 px is plenty. `null` shows a plain cover. |
 
+The shelf shows the chronologies in the order of `files`, each where its first file is.
+
 ### Files on another site
 
 `index.json` itself is always `library/index.json` beside the PWA, but the files and covers

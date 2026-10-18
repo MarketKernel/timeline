@@ -12,9 +12,10 @@ texts and pictures; renamed to `.zip` it is a folder with a readable `timeline.j
 ordinary images. The page holds no data at all, never touches the network, and works from a
 disk.
 
-- **The file**: `build/timeline.html` — download it, double-click it, open a `.timeline`.
-- **The app**: the same page as a PWA, installable and offline, with a shelf of
-  chronologies — [time.marketkernel.com](https://time.marketkernel.com/).
+- **The app**: open [time.marketkernel.com](https://time.marketkernel.com/) — a shelf of
+  chronologies to read, installable and offline.
+- **The file**: `timeline-<tag>.html` from [Releases](https://github.com/MarketKernel/timeline/releases)
+  — the same page in one file: download it, double-click it, open a `.timeline`.
 
 ## Using it
 
