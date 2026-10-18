@@ -1,6 +1,6 @@
 {
   "name": "timeline",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Timeline — a chronology viewer and editor in one HTML file; chronologies are .timeline files",
   "license": "MIT",

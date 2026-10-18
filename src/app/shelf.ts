@@ -53,15 +53,20 @@ async function keepOffline(entry: LibraryEntry, keep: boolean): Promise<boolean>
     for (const url of urls) await cache.delete(url);
     return true;
   }
+  // Past the HTTP cache: the shelf has shown the cover as a picture, which a site may send
+  // without the header that lets a script read it, and the browser would give that copy here.
+  const fresh = (url: string) => new Request(url, { cache: 'reload' });
   try {
-    await cache.addAll([...urls, at('index.json')]);
-    // Kept files must survive the browser's tidying when space runs short.
-    void navigator.storage?.persist?.();
-    return true;
+    await cache.addAll([fresh(at(entry.file)), at('index.json')]);
   } catch {
-    toast(t('shelf', 'Could not download {name} — are you online?', { name: entry.title }), { kind: 'error' });
+    toast(t('shelf', '{name} could not be kept offline: there is no network, or its site does not let the app fetch it.', { name: entry.title }), { kind: 'error' });
     return false;
   }
+  // The cover is a nicety: a file kept without it opens all the same.
+  if (entry.cover) await cache.add(fresh(at(entry.cover))).catch(() => undefined);
+  // Kept files must survive the browser's tidying when space runs short.
+  void navigator.storage?.persist?.();
+  return true;
 }
 
 /**

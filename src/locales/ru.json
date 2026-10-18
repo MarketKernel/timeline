@@ -300,7 +300,7 @@
     "Close search": "Закрыть поиск"
   },
   "shelf": {
-    "Could not download {name} — are you online?": "Не удалось загрузить «{name}» — есть ли связь?",
+    "{name} could not be kept offline: there is no network, or its site does not let the app fetch it.": "Не удалось сохранить «{name}» для работы без сети: нет сети, или сайт, где лежит файл, не даёт приложению его получить.",
     "Opening {name}…": "Открываю «{name}»…",
     "{name} could not be loaded here: there is no network, or its site does not let the app fetch it. Download the file and open it.": "Не удалось загрузить «{name}» здесь: нет сети, или сайт, где лежит файл, не даёт приложению его получить. Скачайте файл и откройте его.",
     "Download": "Скачать",
