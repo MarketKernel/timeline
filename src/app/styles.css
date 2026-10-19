@@ -2079,9 +2079,11 @@ body.editing .details {
   margin: 0 0 0.7em;
 }
 
+/* An address has no spaces to wrap at, and a long one would run past the padding to the edge. */
 .details-text a,
 .details-links a {
   color: var(--accent);
+  overflow-wrap: anywhere;
 }
 
 .details-links {

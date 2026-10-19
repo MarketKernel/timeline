@@ -45,11 +45,11 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   const kept = () => caches.open(LIBRARY).then((cache) => cache.match(request, { ignoreSearch: true }));
-  if (url.origin !== self.location.origin) {
+  // Another site's library files, or this site's beside the app's folder rather than in it.
+  if (!url.href.startsWith(self.registration.scope)) {
     event.respondWith(kept().then((file) => file ?? fetch(request)));
     return;
   }
-  if (!url.href.startsWith(self.registration.scope)) return;
   // From this worker's own cache only: a waiting worker's, with the next version, is there too.
   const cached = (key, options) => caches.open(CACHE).then((cache) => cache.match(key, options));
   if (url.pathname.includes('/library/')) {
@@ -62,9 +62,17 @@ self.addEventListener('fetch', (event) => {
     }
     return;
   }
-  if (request.mode === 'navigate') {
+  // The app may be the root of the site that keeps the chronologies: its scope then holds
+  // the site's other pages and files too. Only the app's own address is the app's page; any
+  // other navigation is another page, or a file downloaded by the shelf's link.
+  const home = new URL(self.registration.scope).pathname;
+  if (request.mode === 'navigate' && (url.pathname === home || url.pathname === `${home}index.html`)) {
     event.respondWith(cached('./').then((page) => page ?? fetch(request)));
     return;
   }
-  event.respondWith(cached(request, { ignoreSearch: true }).then((file) => file ?? fetch(request)));
+  event.respondWith(
+    cached(request, { ignoreSearch: true })
+      .then((file) => file ?? kept())
+      .then((file) => file ?? fetch(request)),
+  );
 });
