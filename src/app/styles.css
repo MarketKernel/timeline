@@ -3108,6 +3108,19 @@ body.dragging .bar {
 }
 
 /* The background music in the form: its format and size, and the ways to change it. */
+/* The second ruler's date and name, under its tick box, set in a little as belonging to it. */
+.anchor-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+  padding-left: 20px;
+}
+
+.anchor-fields[hidden] {
+  display: none;
+}
+
 .music-row {
   display: flex;
   flex-wrap: wrap;

@@ -618,6 +618,8 @@ try {
     const f = d.querySelector('.date-field'); f.querySelector('.date-year').value = '1990'; f.querySelector('.date-month').value = '5'; f.querySelector('.date-month').dispatchEvent(new Event('change')); f.querySelector('.date-day').value = '17';
     const e = d.querySelector('#timeline-end'); e.value = 'now'; e.dispatchEvent(new Event('change'));
     d.querySelector('#timeline-scale').value = JSON.stringify({ px: 1, unit: 'day', count: 1 });
+    const a = d.querySelector('#timeline-anchor'); a.checked = true; a.dispatchEvent(new Event('change'));
+    d.querySelector('#timeline-anchor-label').value = 'Возраст';
   })()`);
   await ev(tab, pasteImage('dialog[open] .timeline-settings', 'cover.png', '#9ab'));
   check('a pasted picture is the cover', await chrome.until(tab, "document.querySelector('dialog[open] .cover-tile-image')?.src.startsWith('blob:')"), true);
@@ -625,6 +627,8 @@ try {
   await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
   check('the new timeline opens, in the language picked, in edit mode', await chrome.until(tab, "document.getElementById('doc-title').textContent === 'Anna: жизнь' && timeline.session.doc.lang === 'ru' && timeline.editing"), true);
   check('…from the date to today, with its cover', await ev(tab, "(() => { const d = timeline.session.doc; return [d.start, d.end, !!d.images[d.cover], d.meta.id]; })()"), [{ y: 1990, m: 5, d: 17 }, { now: true }, true, 'anna-zhizn']);
+  check('…counting the age from the day it begins on the second ruler', await chrome.until(tab, "!document.querySelector('.ruler--anchor').hidden && document.querySelector('.ruler--anchor .ruler-name').textContent.startsWith('Возраст')"), true);
+  check('…which the file keeps as its anchor', await ev(tab, 'timeline.session.doc.anchor'), { label: 'Возраст', at: { y: 1990, m: 5, d: 17 } });
   // The paper after today is the strip's own margin: wide enough for the today label, in whatever font the system has.
   check('…at today, at the scale it opens at', await chrome.until(tab, "Math.abs(timeline.strip.view.pxPerDay - 1) < 0.001 && Math.abs(timeline.strip.view.center + timeline.strip.view.width / 2 - timeline.strip.extentDays[1] - timeline.strip.margins(1)[1]) < 1"), true);
   await shot(tab, '10-my-life');

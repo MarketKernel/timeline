@@ -1,7 +1,8 @@
 /**
  * The chronology's own settings, and "New timeline", which is the same form
  * on an empty file: its title and description, a cover (any picture), where
- * it begins and ends, how it looks to whoever opens it (`style`: the paper,
+ * it begins and ends, the second ruler (years from a date: an age, a city's
+ * years), how it looks to whoever opens it (`style`: the paper,
  * its texture, the colour of items without one, the face of titles), the
  * scale it opens at and the language of its texts. Unlike Settings, which are
  * the reader's, all of this is in the file and travels with it; the pencil at
@@ -12,7 +13,7 @@
 import { imageChange, fieldChange, type Change } from '../core/commands';
 import { isNow, startOf, today, type End, type When } from '../core/dates';
 import { language, t } from '../core/i18n';
-import { AUDIO_EXTS, DEFAULT_COLOR, emptyDoc, LANG_PATTERN, TEXTURES, type AudioExt, type Author, type Music, type Doc, type ImageInfo, type Style, type Texture, type TitleFont, type ViewSpec } from '../core/model';
+import { AUDIO_EXTS, DEFAULT_COLOR, emptyDoc, LANG_PATTERN, TEXTURES, type Anchor, type AudioExt, type Author, type Music, type Doc, type ImageInfo, type Style, type Texture, type TitleFont, type ViewSpec } from '../core/model';
 import { describeScale, PRESETS, presetsFor, specText, type ScaleSpec } from '../core/scale';
 import { STOCK_PAPER } from '../core/style';
 import { contentHash } from '../core/hash';
@@ -70,6 +71,7 @@ interface Fields {
   author?: Author;
   start?: When;
   end?: End;
+  anchor?: Anchor;
   cover?: string;
   style?: Style;
   music?: Music;
@@ -235,6 +237,41 @@ function settingsForm(doc: Doc, session: Session) {
   endMode.addEventListener('change', syncDates);
   syncDates();
 
+  // The second ruler: years under the axis counted from a date — one's age from the birthday, a
+  // city's years from its founding. A file that has none counts from where it begins, until
+  // another date is typed in; a file counting from an item ("Count years from here") keeps
+  // counting from it, and following it, while its date is left as it is.
+  const anchorItem = doc.anchor?.item ? doc.items.find((i) => i.id === doc.anchor!.item) : undefined;
+  const anchorOn = h('input', { type: 'checkbox', id: 'timeline-anchor', checked: !!doc.anchor });
+  const anchorDate = dateField(t('properties', 'Count from'), doc.anchor?.at ?? anchorItem?.start ?? doc.start ?? fallback);
+  const anchorLabel = h('input', { class: 'field-input', type: 'text', id: 'timeline-anchor-label', lang, value: doc.anchor?.label ?? '', placeholder: t('properties', 'Age') });
+  let followStart = !doc.anchor;
+  const fromStart = () => {
+    const s = startMode.value === 'date' ? startDate.read() : null;
+    if (followStart && s) anchorDate.set(s);
+  };
+  const anchorFields = h(
+    'div',
+    { class: 'anchor-fields' },
+    anchorDate.el,
+    anchorItem ? hint(t('properties', 'Counts from “{title}” and moves with it, unless another date is set here.', { title: anchorItem.title })) : null,
+    field(t('properties', 'Name of the ruler'), anchorLabel, hint(t('properties', 'Left empty, it is called “Years”.'))),
+  );
+  const syncAnchor = () => {
+    anchorFields.hidden = !anchorOn.checked;
+    fromStart();
+  };
+  anchorOn.addEventListener('change', syncAnchor);
+  startMode.addEventListener('change', fromStart);
+  startDate.el.addEventListener('change', fromStart);
+  anchorDate.el.addEventListener('change', () => (followStart = false));
+  syncAnchor();
+  const anchorField = group(
+    t('properties', 'Second ruler'),
+    h('label', { class: 'inline-check' }, anchorOn, h('span', {}, t('properties', 'Count the years from a date under the axis: an age, a city’s years'))),
+    anchorFields,
+  );
+
   // The scale it opens at.
   // The scales this chronology can be shown at; a new one, not yet any length, is offered them all.
   const [lo, hi] = app.strip.extentDays;
@@ -376,6 +413,7 @@ function settingsForm(doc: Doc, session: Session) {
     startDate.el,
     endDate.el,
     hint(t('properties', 'The strip begins and ends there; an item outside is never cut off — the strip widens to it.')),
+    anchorField,
     field(t('properties', 'Opens at the scale'), scale, hint(t('properties', 'A reader who has opened it before comes back to where they left off.'))),
     section(t('properties', 'Look')),
     paper.el,
@@ -449,6 +487,18 @@ function settingsForm(doc: Doc, session: Session) {
       if (fields.start && startOf(e) <= startOf(fields.start)) return t('properties', 'The end comes before the beginning.');
       fields.end = e;
     }
+    fields.anchor = undefined;
+    if (anchorOn.checked) {
+      const at = followStart && fields.start ? structuredClone(fields.start) : anchorDate.read();
+      if (!at) return t('properties', 'The second ruler’s date is not a date.');
+      // Its base and the fields a newer version wrote stay as they are.
+      const anchor: Anchor = { ...structuredClone(doc.anchor ?? {}), label: anchorLabel.value.trim() };
+      delete anchor.at;
+      delete anchor.item;
+      if (anchorItem && canon(at) === canon(anchorItem.start)) anchor.item = anchorItem.id;
+      else anchor.at = at;
+      fields.anchor = anchor;
+    }
     // Only the scale is the form's: a centre the file names stays as it is.
     const view: ViewSpec = structuredClone(doc.view ?? {});
     delete view.scale;
@@ -499,6 +549,11 @@ async function runForm(doc: Doc, session: Session, creating: boolean): Promise<{
   return answer === 'save' && fields ? { fields, cover, tune } : null;
 }
 
+/** A second ruler just set up, where the reader has turned the second ruler off, says why it is not there. */
+function secondRulerOff(): void {
+  if (!app.settings.secondRuler) toast(t('editor', 'The second ruler is off in Settings.'));
+}
+
 /** The settings of the open file. */
 async function timelineSettings(): Promise<void> {
   const session = app.session;
@@ -507,6 +562,7 @@ async function timelineSettings(): Promise<void> {
   const result = await runForm(doc, session, false);
   if (result && app.session === session) {
     const changes: Change[] = [];
+    if (result.fields.anchor && !doc.anchor) secondRulerOff();
     const { cover, tune } = result;
     // New music's bytes go to the store before the change: the player reads them when it comes.
     if (tune?.blob) session.store.addedAudio.set(tune.music.file, tune.blob);
@@ -536,6 +592,7 @@ export async function newTimeline(): Promise<void> {
   doc.meta.id = newDocId(fields.title);
   if (cover) doc.images[cover.hash] = cover.info;
   if (!(await openNew(doc))) return;
+  if (doc.anchor) secondRulerOff();
   if (cover?.encoded) app.session?.store.added.set(cover.hash, cover.encoded);
   if (tune?.blob) {
     app.session?.store.addedAudio.set(tune.music.file, tune.blob);

@@ -36,7 +36,8 @@ disk.
   links, and previous/next in time. Search with `/` across titles, texts and references.
   The file's texts are shown in its own language whatever the interface speaks.
 - **Second ruler**: years counted from the file's anchor (from a city's founding, from the
-  first flight, the age in a life). Select a period and the ruler shows that person's age.
+  first flight, the age in a life), set in Timeline settings or with "Count years from here"
+  on an item. Select a period and the ruler shows that person's age.
 - **Measure**: hold Alt and drag along the ruler — "First flight → Moon landing: 66 years".
 - **Edit**: the pencil (or `E`) turns edit mode on, and the edit bar appears under the
   toolbar. **Add** an event or a period there: pick one, then click on the strip where the
@@ -75,7 +76,8 @@ disk.
   pasted or dropped); its **author**, if you like (a name, a website, a contact); the language
   of its texts; where it **begins and ends** (its first and
   last item, a date, or the present day — with an end the strip stops there, as it does at
-  the start); the scale it opens at; and its **look** — the colour of the paper (kept in its
+  the start); the **second ruler** (years from a date: an age, a city's years); the scale it
+  opens at; and its **look** — the colour of the paper (kept in its
   hue and darkened in the dark theme), its texture (grain, plain, squares, lines, dots, graph
   paper), the colour of items without one of their own, serif or sans titles; and, if you
   like, **background music** (any MP3, M4A, WAV… file). Whoever opens the file sees the same;
@@ -252,7 +254,7 @@ an `index.json` whose files and covers are on another site, by https:// address.
 | `src/app/export.ts`, `source.ts` | Export as a web page: this page as it was loaded, with the timeline inside; opening it read-only |
 | `src/app/shelf.ts`, `update.ts`, `src/pwa/sw.js` | the PWA: the shelf, updates, the service worker |
 | `src/app/info.ts` | About this timeline, the ⓘ after the title: author, contact, website, date created |
-| `src/app/properties.ts`, `look.ts` | Timeline settings and New timeline: the file's texts, cover, dates, opening scale and look; the look on the page |
+| `src/app/properties.ts`, `look.ts` | Timeline settings and New timeline: the file's texts, cover, dates, second ruler, opening scale and look; the look on the page |
 | `src/app/music.ts` | a timeline's background music: playing, fading, pausing, the toolbar's speaker |
 | `src/app/main.ts`, `settings.ts`, `ui.ts` | start-up, toolbar, settings, toasts and dialogs |
 | `library/index.json` | the shelf of this repository's GitHub Pages: chronologies kept on another site, by address (`npm run build -- --library library`) |
