@@ -23,7 +23,7 @@ export interface Settings {
 }
 
 const DEFAULTS: Readonly<Settings> = {
-  language: 'system',
+  language: 'en',
   theme: 'system',
   autosave: true,
   showMinor: true,
