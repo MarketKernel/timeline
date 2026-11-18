@@ -51,6 +51,8 @@ type Events = {
   start: void;
   /** "Count years from here" on an item. */
   anchor: string;
+  /** "Add an event to it" on a period: a new event, attached to it. */
+  addToPeriod: string;
   /** The PWA's update state changed. */
   update: void;
 };

@@ -23,7 +23,7 @@ import { itemChange, imageChange, fieldChange, type Change } from '../core/comma
 import { endDay, formatDuration, formatRange, formatWhen, isNow, shiftWhen, snapTo, startOf, type When } from '../core/dates';
 import { shortId } from '../core/hash';
 import { t, tn } from '../core/i18n';
-import { MAX_SHIFT, picturesOf, spanOf, type CardSize, type Item, type ItemKind } from '../core/model';
+import { MAX_SHIFT, periodHolds, picturesOf, spanOf, type CardSize, type Item, type ItemKind } from '../core/model';
 import { byId, h, isMac, isNarrow, isTouch, isTyping, swallowClick, trackPointer } from './dom';
 import { deleteItem, openEditor, SIZE_OPTIONS, sizeLabel, whenAt } from './editor';
 import { encodeImage } from './images';
@@ -613,6 +613,13 @@ export function setupEditing(): void {
   });
   on('closed', () => setEditing(false));
   on('anchor', (id) => void makeAnchor(id));
+  // A new event in a period: at the middle of the screen when the period takes it in, else at the period's start.
+  on('addToPeriod', (id) => {
+    const period = app.session?.doc.items.find((i) => i.id === id && i.kind === 'period');
+    if (!period) return;
+    const here = whenAt(app.strip.view.center);
+    void openEditor(null, { kind: 'event', start: periodHolds(period, here) ? here : { ...period.start }, periods: [period.id] });
+  });
   document.addEventListener('keydown', onKey);
   setupEditBar();
   setupDragging();

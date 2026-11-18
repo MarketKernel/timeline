@@ -9,8 +9,8 @@
 import { itemChange, imageChange, fieldChange, type Change } from '../core/commands';
 import { formatRange, isNow, snapTo, startOf, type End, type When } from '../core/dates';
 import { shortId } from '../core/hash';
-import { t } from '../core/i18n';
-import { DEFAULT_COLOR, picturesOf, type CardShape, type CardSize, type Credit, type ImageInfo, type Item, type ItemKind } from '../core/model';
+import { t, tn } from '../core/i18n';
+import { colorOf, DEFAULT_COLOR, detachFrom, eventsOf, periodHolds, periodsAt, picturesOf, type CardShape, type CardSize, type Credit, type ImageInfo, type Item, type ItemKind } from '../core/model';
 import { h, icon, shape, trackPointer } from './dom';
 import { colorField, dateField, field, group, hint, textFields } from './forms';
 import { encodeImage, type NewImage } from './images';
@@ -148,6 +148,46 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
   sizeRow.addEventListener('change', explainSize);
   explainSize();
   const sizeField = group(t('editor', 'Size — the larger, the more it matters'), sizeRow, sizeHint);
+
+  // An event's periods, any number of them: only those its date falls within are offered, and the list follows the date as it is typed.
+  /** The periods ticked: kept while the date is moved out of one and back, so a slip of the year does not lose it. */
+  const chosen = new Set(base.periods ?? []);
+  const periodList = h('div', { class: 'period-checks', id: 'edit-periods', role: 'group', 'aria-label': t('editor', 'Periods'), 'aria-describedby': 'edit-periods-hint' });
+  const periodHint = h('p', { class: 'field-hint', id: 'edit-periods-hint' });
+  const fillPeriods = () => {
+    const when = start.read();
+    const offered = when ? periodsAt(doc, when) : [];
+    periodList.replaceChildren(
+      ...offered.map((p) => {
+        const box = h('input', { type: 'checkbox', value: p.id, checked: chosen.has(p.id) });
+        box.addEventListener('change', () => (box.checked ? chosen.add(p.id) : chosen.delete(p.id)));
+        return h(
+          'label',
+          { class: 'inline-check period-check', style: `--cat:${colorOf(p, doc)}` },
+          box,
+          h('span', { class: 'period-swatch', 'aria-hidden': 'true' }),
+          h('span', { class: 'period-check-title', lang: doc.lang }, p.title),
+          h('span', { class: 'period-check-meta' }, formatRange(p.start, p.end)),
+        );
+      }),
+    );
+    periodList.hidden = !offered.length;
+    const lost = doc.items.filter((i) => chosen.has(i.id) && !offered.includes(i));
+    periodHint.textContent = !when
+      ? t('editor', 'The periods are offered once the date is a date.')
+      : lost.length === 1
+        ? t('editor', '“{title}” does not take in this date: saved so, the event leaves it.', { title: lost[0]!.title })
+        : lost.length
+          ? t('editor', '{titles} do not take in this date: saved so, the event leaves them.', { titles: lost.map((l) => t('editor', '“{title}”', { title: l.title })).join(', ') })
+          : offered.length
+            ? t('editor', 'Tick the periods it is about, as many as it takes: only those this date falls within are offered. Each period’s details list its events.')
+            : t('editor', 'No period takes in this date.');
+    periodHint.classList.toggle('field-hint--warning', !!lost.length);
+  };
+  start.el.addEventListener('change', fillPeriods);
+  start.el.addEventListener('input', fillPeriods);
+  fillPeriods();
+  const periodField = group(t('editor', 'Periods'), periodList, periodHint);
 
   // A card moved by hand (its row, and how far from its dot) or a bar's row: kept, or given back to the layout.
   const keepLane = h('input', { type: 'checkbox', checked: true });
@@ -329,6 +369,7 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
         // A photo's own date fills an empty new event.
         if (!existing && encoded.taken && kind === 'event' && pictures.length === 1) {
           start.set(encoded.taken);
+          fillPeriods();
         }
       } catch (error) {
         toast(t('editor', 'This picture could not be read: {error}', { error: (error as Error).message }), { kind: 'error' });
@@ -406,6 +447,7 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
     isEra
       ? h('p', { class: 'field-hint' }, `${formatRange(base.start, base.end)} · ${t('editor', 'An era’s dates are set in the list of eras, where they meet the eras beside it.')}`)
       : h('div', { class: 'editor-dates' }, start.el, kind === 'period' ? endBox : null),
+    isEvent ? periodField : null,
     isEvent ? sizeField : null,
     color.el,
     isEvent ? background.el : null,
@@ -461,6 +503,10 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
     if (!s) return fail(t('editor', 'The start date is not a date.'));
     const item: Item = { ...base, id: base.id || newId(kind), kind, start: s, title };
     if (isEvent) {
+      // The list follows the date; a period that does not take it in is never saved. Kept in time order.
+      const periods = periodsAt(doc, s).filter((p) => chosen.has(p.id)).map((p) => p.id);
+      if (periods.length) item.periods = periods;
+      else delete item.periods;
       const fill = background.value();
       if (fill) item.background = fill;
       else delete item.background;
@@ -530,7 +576,17 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
     else delete item.gallery;
   }
   if (!existing || JSON.stringify(existing) !== JSON.stringify(item)) changes.push(itemChange(doc, item.id, item));
+  // A period's new dates may no longer take in some of its events: they leave it, in the same command (one undo brings them back).
+  let left = 0;
+  if (kind === 'period' && existing) {
+    for (const event of eventsOf(doc, item.id)) {
+      if (periodHolds(item, event.start)) continue;
+      changes.push(itemChange(doc, event.id, detachFrom(event, item.id)));
+      left++;
+    }
+  }
   run(existing ? t('editor', 'Edit {title}', { title: item.title }) : t('editor', 'Add {title}', { title: item.title }), changes);
+  if (left) toast(tn('editor', '{count} event is outside the new dates of “{title}” and is no longer attached to it', '{count} events are outside the new dates of “{title}” and are no longer attached to it', left, { title: item.title }));
   const added = doc.items.find((i) => i.id === item.id);
   if (added) {
     app.strip.reveal(added);
@@ -543,6 +599,10 @@ export function deleteItem(id: string): void {
   const item = session?.doc.items.find((i) => i.id === id);
   if (!session || !item) return;
   const changes: Change[] = [itemChange(session.doc, id, undefined)];
+  // A period's events stay, no longer attached to it (their other periods kept); undo attaches them again.
+  if (item.kind === 'period') {
+    for (const event of eventsOf(session.doc, id)) changes.push(itemChange(session.doc, event.id, detachFrom(event, id)));
+  }
   // An anchor on the item goes with it.
   if (session.doc.anchor?.item === id) changes.push(fieldChange(session.doc, 'anchor', undefined));
   const command = { label: t('editor', 'Delete {title}', { title: item.title }), changes };
