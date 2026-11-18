@@ -8,7 +8,16 @@
     "Edit": "Изменить",
     "Count years from here": "Считать годы отсюда",
     "Close (Esc)": "Закрыть (Esc)",
-    "Close": "Закрыть"
+    "Close": "Закрыть",
+    "Events of this period": "События этого периода",
+    "{count} events in this period": {
+      "one": "{count} событие в этом периоде",
+      "few": "{count} события в этом периоде",
+      "many": "{count} событий в этом периоде",
+      "other": "{count} события в этом периоде"
+    },
+    "Add an event to it": "Добавить в него событие",
+    "Periods": "Периоды"
   },
   "editor": {
     "Year": "Год",
@@ -118,7 +127,20 @@
     "Huge: a turning point, the largest card, its gallery beside its picture.": "Огромная: поворотный момент, самая большая карточка, галерея рядом с картинкой.",
     "Size — the larger, the more it matters": "Размер — чем больше, тем важнее",
     "“{title}” is {size} now: cards that size show from closer. Zoom in to see it.": "«{title}» теперь {size}: такие карточки видны ближе. Приблизьте, чтобы её увидеть.",
-    "Keep the card where it was dragged to; its date stays as set above": "Оставить карточку там, куда её перетащили; дата остаётся такой, как задана выше"
+    "Keep the card where it was dragged to; its date stays as set above": "Оставить карточку там, куда её перетащили; дата остаётся такой, как задана выше",
+    "The periods are offered once the date is a date.": "Периоды появятся, когда дата будет введена верно.",
+    "“{title}” does not take in this date: saved so, the event leaves it.": "«{title}» не включает эту дату: если сохранить так, событие выйдет из него.",
+    "{count} events are outside the new dates of “{title}” and are no longer attached to it": {
+      "one": "{count} событие вне новых дат «{title}» и больше к нему не привязано",
+      "few": "{count} события вне новых дат «{title}» и больше к нему не привязаны",
+      "many": "{count} событий вне новых дат «{title}» и больше к нему не привязаны",
+      "other": "{count} события вне новых дат «{title}» и больше к нему не привязаны"
+    },
+    "Periods": "Периоды",
+    "{titles} do not take in this date: saved so, the event leaves them.": "{titles} не включают эту дату: если сохранить так, событие выйдет из них.",
+    "Tick the periods it is about, as many as it takes: only those this date falls within are offered. Each period’s details list its events.": "Отметьте периоды, к которым относится событие, — сколько нужно. Предлагаются только те, в которые входит дата. В подробностях каждого периода — список его событий.",
+    "No period takes in this date.": "Ни один период не включает эту дату.",
+    "“{title}”": "«{title}»"
   },
   "ui": {
     "Cancel": "Отмена",

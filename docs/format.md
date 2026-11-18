@@ -175,13 +175,14 @@ the app sorts them by date when it saves.
 | `background` | event | `"#rrggbb"`: the card's own fill. The text turns light or dark to stay readable. |
 | `lane` | event, period | 0–99: a row fixed by hand. Normally left out: the app lays rows out itself. |
 | `shift` | event | An integer, −5,000 … 5,000: px the card was moved by hand to the right of where it would stand (negative: to the left). The date and its dot stay; a line joins the card to them. Normally left out. |
+| `periods` | event | The `id`s of the periods the event is about, as many as it takes: a first flight is in both brothers' lives and in the age of powered flight. Each must be a `period` of the same file (anything else is left out with a warning; one named twice is kept once), and its dates should take in the event's date — the app offers only such periods, and lets an event go of a period whose new dates leave it out, keeping its others. Each period's details list its events. Leave it out rather than writing `[]`. |
 
 **The three kinds:**
 
 - **event**: something that happened on a date. A card above the axis with a dot on it.
 - **period**: something that lasted, such as a life, a reign or a war. A bar in the rows
   under the axis. Periods may overlap freely. A period can have pictures in the file, but
-  the app's editor offers none for it.
+  the app's editor offers none for it. Events may be attached to it (`periods` on the event).
 - **era**: a stretch of the whole chronology. A coloured band along the axis. Eras should
   **follow one another without overlapping**: each one begins after the previous one ends.
   The app's Eras editor treats them as a list where each era ends the day before the next

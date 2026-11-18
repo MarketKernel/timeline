@@ -595,6 +595,61 @@ try {
   check('the saved event is in the reopened file', await ev(tab, "[...document.querySelectorAll('.card, .dot')].some(el => el.textContent.includes('A test event') || el.title?.includes('A test event'))"), true);
   check('…with its colour', await ev(tab, "timeline.session.doc.items.find(i => i.title === 'A test event')?.color"), '#7b5e8a');
   await key('e', 'KeyE', 69, 'e');
+  // An event attached to periods, as many as it is about: only those its date falls within are offered, and the list follows the date.
+  const ctrl = (k, code, vk, shift = false) => chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers: shift ? 10 : 2 }, tab);
+  await key('e', 'KeyE', 69, 'e');
+  await ev(tab, "document.activeElement?.blur(); timeline.strip.selected = 'wright'; document.querySelector('[data-id=wright]')?.focus()");
+  await key('e', 'KeyE', 69, 'e');
+  const periodBoxes = "[...document.querySelectorAll('dialog[open] #edit-periods input')].map(i => i.value)";
+  const periodTicked = "[...document.querySelectorAll('dialog[open] #edit-periods input:checked')].map(i => i.value)";
+  const tickPeriod = (id) => ev(tab, `document.querySelector('dialog[open] #edit-periods input[value="${id}"]').click()`);
+  check('an event’s window offers the periods its date falls within', await chrome.until(tab, "document.querySelectorAll('dialog[open] #edit-periods input').length === 4"), true);
+  check('…17 Dec 1903: the Wrights, Lindbergh’s childhood, powered flight — none ticked', await ev(tab, `[${periodBoxes}, ${periodTicked}]`), [['wilbur', 'orville', 'lindbergh-life', 'aviation-age'], []]);
+  const setYear = (y) => ev(tab, `(() => { const y = document.querySelector('dialog[open] .date-year'); y.value = '${y}'; y.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await tickPeriod('aviation-age');
+  await setYear(1902);
+  check('…another year, other periods: the one ticked goes, and the window says so', await ev(tab, `[${periodBoxes}, ${periodTicked}, document.getElementById('edit-periods-hint').textContent.startsWith('“Powered flight” does not take in this date'), document.getElementById('edit-periods-hint').classList.contains('field-hint--warning')]`), [['wilbur', 'orville', 'lindbergh-life'], [], true, true]);
+  await setYear(1903);
+  check('…back in it, the period ticked is ticked again', await ev(tab, periodTicked), ['aviation-age']);
+  await tickPeriod('orville');
+  await shot(tab, '30-event-period');
+  await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  check('saved, the event is attached to both, in time order', await chrome.until(tab, "!document.querySelector('dialog[open]') && JSON.stringify(timeline.session.doc.items.find(i => i.id === 'wright').periods) === JSON.stringify(['orville', 'aviation-age'])"), true);
+  check('…its details name the periods, each a step to it', await chrome.until(tab, "document.querySelector('.details-period-label')?.textContent === 'Periods' && [...document.querySelectorAll('.details-period-link')].map(b => b.textContent).join() === 'Orville Wright,Powered flight'"), true);
+  await ev(tab, "document.querySelector('.details-period-link').click()");
+  check('…the period’s details list its events', await chrome.until(tab, "document.getElementById('details-title').textContent === 'Orville Wright' && [...document.querySelectorAll('.details-event-title')].map(e => e.textContent).join() === 'The Wright brothers fly'"), true);
+  check('…and offer to add another to it', await ev(tab, "[...document.querySelectorAll('.details-actions button')].some(b => b.textContent === 'Add an event to it')"), true);
+  await ev(tab, "[...document.querySelectorAll('.details-actions button')].find(b => b.textContent === 'Add an event to it').click()");
+  check('…a new event, attached to it already', await chrome.until(tab, `JSON.stringify(${periodTicked}) === JSON.stringify(['orville'])`), true);
+  await ev(tab, "document.querySelector('dialog[open]').close()");
+  await chrome.until(tab, "!document.querySelector('dialog[open]')");
+  const wrightPeriods = "JSON.stringify(timeline.session.doc.items.find(i => i.id === 'wright').periods)";
+  // New dates that leave an event out: it is let go of in the same command, its other period kept, and one undo attaches it again.
+  await ev(tab, "document.activeElement?.blur(); timeline.strip.selected = 'orville'; document.querySelector('[data-id=orville]')?.focus()");
+  await key('e', 'KeyE', 69, 'e');
+  await chrome.until(tab, "document.querySelector('dialog[open] #edit-title')?.value === 'Orville Wright'");
+  await ev(tab, "(() => { const y = document.querySelector('dialog[open] .date-year'); y.value = '1905'; y.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('dialog[open] .button--primary').click(); })()");
+  check('a period’s new dates let go of the events they leave out; their other periods stay', await chrome.until(tab, `!document.querySelector('dialog[open]') && ${wrightPeriods} === '["aviation-age"]'`), true);
+  check('…and say so', await ev(tab, "[...document.querySelectorAll('.toast')].some(t => t.textContent.includes('no longer attached to it'))"), true);
+  await ev(tab, "document.activeElement?.blur()");
+  await ctrl('z', 'KeyZ', 90);
+  check('…one undo: the dates and the link are back', await chrome.until(tab, `(() => { const o = timeline.session.doc.items.find(i => i.id === 'orville'); return o.start.y === 1871 && ${wrightPeriods} === '["orville","aviation-age"]'; })()`), true);
+  // Deleting a period keeps its events, no longer attached to it; undo attaches them again.
+  await ev(tab, "timeline.strip.selected = 'orville'; document.querySelector('[data-id=orville]')?.focus()");
+  await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46 }, tab);
+  check('a deleted period’s events stay, in their other periods only', await chrome.until(tab, `!timeline.session.doc.items.some(i => i.id === 'orville') && ${wrightPeriods} === '["aviation-age"]'`), true);
+  await ev(tab, "document.activeElement?.blur()");
+  await ctrl('z', 'KeyZ', 90);
+  check('…undo brings the period back, its event attached', await chrome.until(tab, `${wrightPeriods} === '["orville","aviation-age"]'`), true);
+  // Saved as a file of its own: it keeps the event's periods.
+  await ev(tab, "window.__pick = 'periods.timeline'");
+  await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'S', code: 'KeyS', windowsVirtualKeyCode: 83, modifiers: 10 }, tab);
+  await chrome.until(tab, "document.getElementById('dirty').hidden");
+  const attachedZip = await core.openZip(core.bytesSource(await opfsBytes(tab, 'periods.timeline')));
+  const attachedJson = JSON.parse(await attachedZip.text(attachedZip.get('timeline.json')));
+  check('saved, the file keeps the event’s periods', attachedJson.items.find((i) => i.id === 'wright').periods, ['orville', 'aviation-age']);
+  await key('e', 'KeyE', 69, 'e');
+
 
   // New → the settings form on an empty file (dates, scale, a pasted cover) → an event with a pasted picture → save.
   await chrome.click(tab, '#home');

@@ -66,7 +66,12 @@ disk.
   **card background** (the text turns dark or light to read on it), and its **shape**: a
   rectangle, or **round** — a medallion with its picture and the title under it, or a disc
   that holds the title, centred over its dot. A period has no pictures: photos dropped on
-  its bar become events.
+  its bar become events. An event may belong to **periods** — lives, reigns, wars, as many
+  as it is about: its window ticks them from those its date falls within, and the list
+  follows the date as it is typed. Each period's details list its events, each a step to it;
+  "Add an event to it" starts one attached already. A period whose new dates leave an event
+  out lets it go, and so does a deleted period, the event's other periods kept (one undo
+  brings it all back).
 - **Crowded stretches**: a card is never shrunk or hidden for want of room. Where cards do
   not fit side by side, they lie over each other — a later event over an earlier one — and
   the one under the pointer comes to the top. Only zooming out hides cards, the smaller

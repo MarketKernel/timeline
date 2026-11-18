@@ -104,6 +104,7 @@ export function setupReading(): void {
     },
     edit: (id) => emit('open', id),
     anchor: (id) => emit('anchor', id),
+    addToPeriod: (id) => emit('addToPeriod', id),
     close: () => select(null),
     editing: () => app.editing,
     ordered: inOrder,
