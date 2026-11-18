@@ -354,12 +354,14 @@ function setupDragging(): void {
     const up = () => {
       document.body.classList.remove('dragging');
       clearTip();
+      // A press let go where it began is a click: the item stays as it was built. (Clearing its
+      // width here, which the strip sets on a bar, an era and a card, shrank it to its name.)
+      if (!moved) return;
       target.style.transform = '';
-      target.style.width = '';
       target.style.boxShadow = '';
-      if (moved) swallowClick();
-      if (moved && next.length) run(label, next);
-      else if (moved) strip.refresh();
+      swallowClick();
+      if (next.length) run(label, next);
+      else strip.refresh();
     };
     trackPointer(target, move, up);
     return true;

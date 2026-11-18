@@ -419,6 +419,23 @@ try {
   await settled();
   check('a bar dragged sideways, or by its end, keeps its dates, and nothing is done', await ev(tab, `[JSON.stringify(timeline.session.doc.items.find(i => i.id === 'apollo')) === ${JSON.stringify(apolloBefore)}, document.getElementById('undo').title === ${JSON.stringify(undoBefore)}]`), [true, true]);
   check('…the drag was the bar’s: the strip did not pan', await ev(tab, 'timeline.strip.view.center'), barCentre);
+  // A click on a bar — pressed and let go where it was pressed — selects it and leaves it as drawn:
+  // it used to lose its width and shrink to its name until the strip was drawn again.
+  const viewAtClick = await ev(tab, '[timeline.strip.view.center, timeline.strip.view.pxPerDay]');
+  // Apollo whole in the part the details panel leaves free, so selecting it does not move the strip.
+  await ev(tab, `timeline.strip.goTo(${1966.5 * 365.2425 + 240 / 0.05}, 0.05, false)`);
+  await settled();
+  const apolloDrawn = await ev(tab, "[document.querySelector('.bar[data-id=apollo]').style.width, timeline.strip.view.center, timeline.strip.view.pxPerDay]");
+  // A point on the bar itself, not under a toast.
+  const onApollo = await ev(tab, "(() => { const bar = document.querySelector('.bar[data-id=apollo]'); const r = bar.getBoundingClientRect(); for (let x = r.left + 10; x < r.right; x += 10) if (document.elementFromPoint(x, r.top + r.height / 2)?.closest('.bar') === bar) return [x, r.top + r.height / 2]; return null; })()");
+  for (const type of ['mousePressed', 'mouseReleased']) await chrome.send('Input.dispatchMouseEvent', { type, x: onApollo[0], y: onApollo[1], button: 'left', clickCount: 1 }, tab);
+  check('a click on a bar in edit mode selects it…', await chrome.until(tab, "timeline.strip.selected === 'apollo' && document.body.classList.contains('editing')"), true);
+  await settled();
+  check('…and leaves its width and the view as they were', await ev(tab, "[document.querySelector('.bar[data-id=apollo]').style.width, timeline.strip.view.center, timeline.strip.view.pxPerDay]"), apolloDrawn);
+  await key('Escape', 'Escape', 27);
+  await chrome.until(tab, '!timeline.strip.selected');
+  await ev(tab, `document.activeElement?.blur(); timeline.strip.goTo(${viewAtClick[0]}, ${viewAtClick[1]}, false)`);
+  await settled();
   const sputnik = await ev(tab, "(() => { const r = document.querySelector('.card[data-id=sputnik]').getBoundingClientRect(); return [r.left + 30, r.bottom - 10, timeline.strip.placed.get('sputnik').row]; })()");
   await dragFrom(sputnik[0], sputnik[1], 3, -24 * 3, 8);
   check('a card dragged up takes the row it is dropped in', await chrome.until(tab, `timeline.session.doc.items.find(i => i.id === 'sputnik').lane === ${sputnik[2] + 3} && timeline.strip.placed.get('sputnik').row > ${sputnik[2]}`), true);
