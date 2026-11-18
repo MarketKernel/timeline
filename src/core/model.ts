@@ -157,9 +157,12 @@ export interface Item {
   /**
    * An event's periods: the ids of the periods it is about, each one's dates
    * taking in the event's date — a first flight is in both brothers' lives and
-   * in the age of powered flight. Each period's details list it.
+   * in the age of powered flight. Each period's details list it; it is hidden
+   * once every one of them is.
    */
   periods?: string[];
+  /** A period put out of sight: its bar is not drawn; the list of periods shows it again. */
+  hidden?: boolean;
   extra?: Extra;
 }
 
@@ -254,7 +257,7 @@ const KEYS = {
   style: ['paper', 'texture', 'color', 'font'],
   music: ['file', 'ext', 'title', 'credit'],
   view: ['center', 'scale'],
-  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'periods', 'image', 'gallery', 'size', 'shape', 'lane', 'shift'],
+  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'periods', 'image', 'gallery', 'size', 'shape', 'lane', 'shift', 'hidden'],
   when: ['y', 'm', 'd', 'approx', 'spread'],
 } as const;
 
@@ -537,6 +540,11 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
         });
       } else dropped(`${path}.periods`);
     }
+    if (value.hidden !== undefined) {
+      // `false` is what leaving it out says.
+      if (kind === 'period' && value.hidden === true) item.hidden = true;
+      else if (value.hidden !== false) dropped(`${path}.hidden`);
+    }
     const extra = extraOf(value, ITEM_KEYS);
     if (extra) item.extra = extra;
     itemIds.add(id);
@@ -694,6 +702,7 @@ function docToJson(doc: Doc): Record<string, unknown> {
         ['shape', item.shape],
         ['lane', item.lane],
         ['shift', item.shift],
+        ['hidden', item.hidden || undefined],
       ],
       item.extra,
     ),
@@ -858,6 +867,9 @@ export function detachFrom(event: Item, periodId: string): Item {
   else delete next.periods;
   return next;
 }
+
+/** The ids of the hidden periods. */
+export const hiddenPeriods = (doc: Doc): Set<string> => new Set(doc.items.filter((item) => item.kind === 'period' && item.hidden).map((item) => item.id));
 
 /** A new, empty chronology. */
 export function emptyDoc(kind: DocKind, id: string, title: string, lang: string, generator: string, now = new Date()): Doc {

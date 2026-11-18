@@ -24,6 +24,8 @@ export interface DetailsHandlers {
   anchor(id: string): void;
   /** A new event, attached to this period. */
   addToPeriod(id: string): void;
+  /** Whether the strip has put an item out of sight: a hidden period, or an event whose periods are all hidden. */
+  hidden(item: Item): boolean;
   close(): void;
   /** Whether edit mode is on: Edit and "count from here" appear only then. */
   editing(): boolean;
@@ -130,12 +132,14 @@ export class Details {
           { class: 'details-period' },
           h('span', { class: 'details-period-label' }, periods.length === 1 ? t('details', 'Period') : t('details', 'Periods')),
           ...periods.map((period) =>
-            h(
-              'button',
-              { class: 'details-period-name details-period-link', type: 'button', lang, style: `--cat:${colorOf(period, doc)}`, onclick: () => this.handlers.show(period.id) },
-              h('span', { class: 'details-mark', 'aria-hidden': 'true' }),
-              period.title,
-            ),
+            this.handlers.hidden(period)
+              ? h('span', { class: 'details-period-name', lang, style: `--cat:${colorOf(period, doc)}` }, period.title, h('span', { class: 'details-period-note' }, ` · ${t('details', 'hidden')}`))
+              : h(
+                  'button',
+                  { class: 'details-period-name details-period-link', type: 'button', lang, style: `--cat:${colorOf(period, doc)}`, onclick: () => this.handlers.show(period.id) },
+                  h('span', { class: 'details-mark', 'aria-hidden': 'true' }),
+                  period.title,
+                ),
           ),
         ),
       );

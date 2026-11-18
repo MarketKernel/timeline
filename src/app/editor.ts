@@ -167,7 +167,7 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
           box,
           h('span', { class: 'period-swatch', 'aria-hidden': 'true' }),
           h('span', { class: 'period-check-title', lang: doc.lang }, p.title),
-          h('span', { class: 'period-check-meta' }, formatRange(p.start, p.end)),
+          h('span', { class: 'period-check-meta' }, `${formatRange(p.start, p.end)}${p.hidden ? ` · ${t('editor', 'hidden')}` : ''}`),
         );
       }),
     );
@@ -588,7 +588,10 @@ export async function openEditor(existing: Item | null, defaults: Partial<Item> 
   run(existing ? t('editor', 'Edit {title}', { title: item.title }) : t('editor', 'Add {title}', { title: item.title }), changes);
   if (left) toast(tn('editor', '{count} event is outside the new dates of “{title}” and is no longer attached to it', '{count} events are outside the new dates of “{title}” and are no longer attached to it', left, { title: item.title }));
   const added = doc.items.find((i) => i.id === item.id);
-  if (added) {
+  // An event put only in hidden periods is out of sight with them: said, not selected where nothing shows.
+  if (added && app.strip.hiddenItem(added)) {
+    toast(t('editor', '“{title}” is only in hidden periods, out of sight with them: the list of periods shows them again.', { title: added.title }));
+  } else if (added) {
     app.strip.reveal(added);
     select(added.id);
   }

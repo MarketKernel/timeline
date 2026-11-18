@@ -595,6 +595,7 @@ try {
   check('the saved event is in the reopened file', await ev(tab, "[...document.querySelectorAll('.card, .dot')].some(el => el.textContent.includes('A test event') || el.title?.includes('A test event'))"), true);
   check('…with its colour', await ev(tab, "timeline.session.doc.items.find(i => i.title === 'A test event')?.color"), '#7b5e8a');
   await key('e', 'KeyE', 69, 'e');
+
   // An event attached to periods, as many as it is about: only those its date falls within are offered, and the list follows the date.
   const ctrl = (k, code, vk, shift = false) => chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers: shift ? 10 : 2 }, tab);
   await key('e', 'KeyE', 69, 'e');
@@ -650,6 +651,101 @@ try {
   check('saved, the file keeps the event’s periods', attachedJson.items.find((i) => i.id === 'wright').periods, ['orville', 'aviation-age']);
   await key('e', 'KeyE', 69, 'e');
 
+  // The list of periods: P opens it beside the strip; an eye hides a period and the events attached to it.
+  await ev(tab, "document.activeElement?.blur()");
+  await key('p', 'KeyP', 80, 'p');
+  check('P opens the list of periods', await chrome.until(tab, "!document.getElementById('periods').hidden && document.getElementById('periods-button').getAttribute('aria-pressed') === 'true'"), true);
+  const listed = "[[...document.querySelectorAll('.periods-section--shown [data-period]')].length, [...document.querySelectorAll('.periods-section--hidden [data-period]')].map(e => e.dataset.period)]";
+  // The sample's ten periods, and the one drawn on the strip above.
+  const periodCount = await ev(tab, "timeline.session.doc.items.filter(i => i.kind === 'period').length");
+  check('…every period shown, in time order, none hidden', await ev(tab, `[${listed}, document.querySelector('.period-row .period-title').textContent]`), [[periodCount, []], 'Wilbur Wright']);
+  check('…with the number of its events', await ev(tab, "document.querySelector('[data-period=orville] .period-meta').textContent.endsWith('1 event')"), true);
+  await ev(tab, "timeline.strip.goTo(" + String(1903 * 365.2425) + ", 0.3, false)");
+  await settled();
+  check('the bar and the attached event are on the strip', await ev(tab, "!!document.querySelector('.bar[data-id=orville]') && !!document.querySelector('[data-id=wright]')"), true);
+  // An event in two periods stays while one of them shows, and goes once both are hidden.
+  await chrome.click(tab, '[data-period=orville] .period-eye');
+  check('an event in a hidden period and a shown one stays on the strip', await chrome.until(tab, "!document.querySelector('.bar[data-id=orville]') && !!document.querySelector('[data-id=wright]')"), true);
+  await chrome.click(tab, '[data-period=aviation-age] .period-eye');
+  check('…once both are hidden, it goes', await chrome.until(tab, "!document.querySelector('.bar[data-id=aviation-age]') && !document.querySelector('[data-id=wright]')"), true);
+  await ev(tab, "document.activeElement?.blur()");
+  await ctrl('z', 'KeyZ', 90);
+  await ctrl('z', 'KeyZ', 90);
+  check('…two undos show both again', await chrome.until(tab, `JSON.stringify(${listed}) === JSON.stringify([${periodCount}, []]) && !!document.querySelector('[data-id=wright]')`), true);
+  // Unticked in its window, the event leaves a period: from here on it is in Orville's alone.
+  await ev(tab, "timeline.strip.selected = 'wright'; document.querySelector('[data-id=wright]')?.focus()");
+  await key('e', 'KeyE', 69, 'e');
+  await chrome.until(tab, `JSON.stringify(${periodTicked}) === JSON.stringify(['orville', 'aviation-age'])`);
+  await tickPeriod('aviation-age');
+  await ev(tab, "document.querySelector('dialog[open] .button--primary').click()");
+  check('unticked, the event leaves that period', await chrome.until(tab, `!document.querySelector('dialog[open]') && ${wrightPeriods} === '["orville"]'`), true);
+  await ev(tab, "document.getElementById('edit-done').click()");
+  await ev(tab, "timeline.strip.goTo(" + String(1903 * 365.2425) + ", 0.3, false)");
+  await settled();
+  await chrome.click(tab, '[data-period=orville] .period-eye');
+  check('the eye hides the period: it moves to the hidden ones', await chrome.until(tab, `JSON.stringify(${listed}) === JSON.stringify([${periodCount - 1}, ['orville']])`), true);
+  check('…its bar and its event leave the strip; the file keeps it', await chrome.until(tab, "!document.querySelector('.bar[data-id=orville]') && !document.querySelector('[data-id=wright]') && timeline.session.doc.items.find(i => i.id === 'orville').hidden === true && !document.getElementById('dirty').hidden"), true);
+  check('…one row under the bars stands for the hidden periods, out of sight while the list is open', await chrome.until(tab, "(() => { const row = document.querySelector('.bars-hidden-row'); return !row.hidden && row.textContent === '1 hidden period' && getComputedStyle(row).visibility === 'hidden'; })()"), true);
+  await shot(tab, '31-periods-panel');
+  await chrome.click(tab, '#periods-keep-events');
+  check('“Keep the events of hidden periods” brings the event back, not the bar', await chrome.until(tab, "!!document.querySelector('[data-id=wright]') && !document.querySelector('.bar[data-id=orville]') && timeline.settings.hidePeriodEvents === false"), true);
+  await chrome.click(tab, '#periods-keep-events');
+  check('…and off again, it goes with its period', await chrome.until(tab, "!document.querySelector('[data-id=wright]') && timeline.settings.hidePeriodEvents === true"), true);
+  await ev(tab, "document.activeElement?.blur()");
+  await ctrl('z', 'KeyZ', 90);
+  check('hiding is undone like any edit', await chrome.until(tab, `!!document.querySelector('.bar[data-id=orville]') && JSON.stringify(${listed}) === JSON.stringify([${periodCount}, []])`), true);
+  await ctrl('Z', 'KeyZ', 90, true);
+  check('…and redone', await chrome.until(tab, "!document.querySelector('.bar[data-id=orville]') && timeline.session.doc.items.find(i => i.id === 'orville').hidden === true"), true);
+  await chrome.click(tab, '[data-period=orville] .period-name');
+  check('a hidden period’s name shows it again and goes to it', await chrome.until(tab, "timeline.session.doc.items.find(i => i.id === 'orville').hidden === undefined && timeline.strip.selected === 'orville' && !!document.querySelector('.bar[data-id=orville]')"), true);
+  check('…its row is marked as the one selected', await chrome.until(tab, "!!document.querySelector('[data-period=orville]')?.classList.contains('period-row--selected')"), true);
+  await chrome.click(tab, '.periods-section--shown .periods-all');
+  check('Hide all: one command for every period', await chrome.until(tab, `(() => { const [shown, hidden] = ${listed}; return shown === 0 && hidden.length === ${periodCount} && hidden[0] === 'wilbur' && timeline.session.history.undoLabel === 'Hide ${periodCount} periods' && !document.querySelector('.bar'); })()`), true);
+  check('…the details of a period hidden close', await ev(tab, "document.getElementById('details').hidden"), true);
+  await chrome.click(tab, '.periods-section--hidden .periods-all');
+  check('Show all brings them back', await chrome.until(tab, `JSON.stringify(${listed}) === JSON.stringify([${periodCount}, []]) && document.querySelectorAll('.bar').length > 0`), true);
+  check('…and the row of hidden periods goes', await chrome.until(tab, "document.querySelector('.bars-hidden-row').hidden"), true);
+  await ev(tab, "(() => { const f = document.querySelector('.periods-filter'); f.value = 'wright'; f.dispatchEvent(new Event('input')); })()");
+  check('the list is filtered by name', await ev(tab, "[...document.querySelectorAll('[data-period]')].map(e => e.dataset.period)"), ['wilbur', 'orville']);
+  await ev(tab, "(() => { const f = document.querySelector('.periods-filter'); f.value = ''; f.dispatchEvent(new Event('input')); })()");
+  await chrome.click(tab, '[data-period=orville] .period-eye');
+  await chrome.until(tab, "timeline.session.doc.items.find(i => i.id === 'orville').hidden === true");
+  await ev(tab, "document.activeElement?.blur()");
+  await key('/', 'Slash', 191, '/');
+  await chrome.until(tab, "!document.getElementById('search').hidden");
+  await ev(tab, "(() => { const i = document.getElementById('search-input'); i.value = 'Wright'; i.dispatchEvent(new Event('input')); })()");
+  check('a hidden period and the event hidden with it are not found', await chrome.until(tab, "!!timeline.strip.highlight && timeline.strip.highlight.has('wilbur') && !timeline.strip.highlight.has('orville') && !timeline.strip.highlight.has('wright')"), true);
+  await ev(tab, "document.getElementById('search-close').click()");
+  // Saved and reopened: the period is still hidden, the event still attached to it.
+  await ev(tab, "window.__pick = 'periods.timeline'");
+  await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'S', code: 'KeyS', windowsVirtualKeyCode: 83, modifiers: 10 }, tab);
+  await chrome.until(tab, "document.getElementById('dirty').hidden");
+  const periodsZip = await core.openZip(core.bytesSource(await opfsBytes(tab, 'periods.timeline')));
+  const periodsJson = JSON.parse(await periodsZip.text(periodsZip.get('timeline.json')));
+  check('the file keeps the period hidden and the event attached', [periodsJson.items.find((i) => i.id === 'orville').hidden, periodsJson.items.find((i) => i.id === 'wright').periods, periodsJson.items.filter((i) => i.hidden).length], [true, ['orville'], 1]);
+  await chrome.click(tab, '#home');
+  check('closing the file closes the list', await chrome.until(tab, "!document.getElementById('start').hidden && document.getElementById('periods').hidden"), true);
+  await chrome.click(tab, '#open-file');
+  await chrome.until(tab, "!document.getElementById('app').hidden && !!timeline.session");
+  await ev(tab, "timeline.strip.goTo(" + String(1903 * 365.2425) + ", 0.3, false)");
+  await settled();
+  check('reopened, the period is out of sight, and its event with it', await ev(tab, "[!document.querySelector('.bar[data-id=orville]'), !!document.querySelector('.bar[data-id=wilbur]'), !document.querySelector('[data-id=wright]')]"), [true, true, true]);
+  // A click on a long period that runs past the edges selects it where it is: no zooming out, no other row.
+  const atRest = await ev(tab, "[timeline.strip.view.center, timeline.strip.view.pxPerDay, document.querySelector('.bar[data-id=aviation-age]').style.top]");
+  // Its middle is far off screen, and a toast may stand over the strip's middle: the click lands near the screen's right edge.
+  const onBar = await ev(tab, "(() => { const r = document.querySelector('.bar[data-id=aviation-age]').getBoundingClientRect(); return [Math.min(r.right, innerWidth) - 150, r.top + r.height / 2]; })()");
+  for (const type of ['mousePressed', 'mouseReleased']) await chrome.send('Input.dispatchMouseEvent', { type, x: onBar[0], y: onBar[1], button: 'left', clickCount: 1 }, tab);
+  check('a click on a long period’s bar selects it…', await chrome.until(tab, "timeline.strip.selected === 'aviation-age'"), true);
+  await settled();
+  check('…and keeps the view and the bar’s row', await ev(tab, "[timeline.strip.view.center, timeline.strip.view.pxPerDay, document.querySelector('.bar[data-id=aviation-age]').style.top]"), atRest);
+  check('the row of hidden periods says how many', await ev(tab, "(() => { const row = document.querySelector('.bars-hidden-row'); return [row.hidden, getComputedStyle(row).visibility, row.textContent]; })()"), [false, 'visible', '1 hidden period']);
+  await chrome.click(tab, '.bars-hidden');
+  await chrome.until(tab, "!document.getElementById('periods').hidden");
+  check('…a click on it opens the list at the hidden ones, the selection kept', await ev(tab, "[!document.getElementById('periods').hidden, document.activeElement?.closest('[data-period]')?.dataset.period, timeline.strip.selected]"), [true, 'orville', 'aviation-age']);
+  check('…and waits in the hidden section', await chrome.until(tab, `JSON.stringify(${listed}) === JSON.stringify([${periodCount - 1}, ['orville']])`), true);
+  await ev(tab, "document.querySelector('.periods-filter').focus()");
+  await chrome.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, tab);
+  check('Esc closes the list', await chrome.until(tab, "document.getElementById('periods').hidden && document.getElementById('periods-button').getAttribute('aria-pressed') === 'false'"), true);
 
   // New → the settings form on an empty file (dates, scale, a pasted cover) → an event with a pasted picture → save.
   await chrome.click(tab, '#home');

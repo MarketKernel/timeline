@@ -33,11 +33,16 @@ export function select(id: string | null, focusPanel = false, reveal = true): vo
     details.hide();
     strip.coveredRight = 0;
   }
+  emit('selected', strip.selected);
 }
 
 /** The document's items in time order, sorted once a change: the panel's previous and next, and Tab, walk it. */
 let ordered: Item[] | null = null;
 const inOrder = (): Item[] => (ordered ??= inTimeOrder(app.session?.doc.items ?? []));
+
+/** The items in time order, less those put out of sight with a hidden period. */
+let shownList: Item[] | null = null;
+const shown = (): Item[] => (shownList ??= inOrder().filter((i) => !app.strip.hiddenItem(i)));
 
 /** Items a reader can reach: what the strip shows, in time order. */
 function reachable(): Item[] {
@@ -105,12 +110,15 @@ export function setupReading(): void {
     edit: (id) => emit('open', id),
     anchor: (id) => emit('anchor', id),
     addToPeriod: (id) => emit('addToPeriod', id),
+    hidden: (i) => app.strip.hiddenItem(i),
     close: () => select(null),
     editing: () => app.editing,
-    ordered: inOrder,
+    // Previous and next skip what the list of periods has put out of sight.
+    ordered: () => shown(),
   });
   searchBar = new SearchBar({
-    items: () => app.session?.doc.items ?? [],
+    // A hidden period, and the events hidden with it, are not found: the list of periods shows them again.
+    items: () => (app.session?.doc.items ?? []).filter((i) => !app.strip.hiddenItem(i)),
     reveal: (id) => {
       const found = item(id);
       if (!found) return;
@@ -128,19 +136,28 @@ export function setupReading(): void {
     if (!app.editing) select(id, true);
   });
   on('closed', () => {
-    ordered = null;
+    ordered = shownList = null;
     details.hide();
     searchBar.close();
   });
-  on('opened', () => (ordered = null));
-  on('changed', () => {
-    ordered = null;
-    // An edit can change or remove what the panel shows.
+  on('opened', () => (ordered = shownList = null));
+  /** An edit can change, remove or hide what the panel shows. */
+  const refreshPanel = () => {
     const id = details.current;
     if (!id) return;
     // Refreshed in place: an edit elsewhere must not pull the strip to this item.
-    if (item(id)) select(id, false, false);
+    const found = item(id);
+    if (found && !app.strip.hiddenItem(found)) select(id, false, false);
     else select(null);
+  };
+  on('changed', () => {
+    ordered = shownList = null;
+    refreshPanel();
+  });
+  // Keeping or hiding the events of hidden periods changes what is shown, and so previous and next.
+  on('settingsChanged', () => {
+    shownList = null;
+    refreshPanel();
   });
   on('language', () => {
     if (details.current) select(details.current, false, false);
