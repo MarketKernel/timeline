@@ -66,7 +66,21 @@ disk.
   **card background** (the text turns dark or light to read on it), and its **shape**: a
   rectangle, or **round** — a medallion with its picture and the title under it, or a disc
   that holds the title, centred over its dot. A period has no pictures: photos dropped on
-  its bar become events.
+  its bar become events. An event may belong to **periods** — lives, reigns, wars, as many
+  as it is about: its window ticks them from those its date falls within, and the list
+  follows the date as it is typed. Each period's details list its events, each a step to it;
+  "Add an event to it" starts one attached already. A period whose new dates leave an event
+  out lets it go, and so does a deleted period, the event's other periods kept (one undo
+  brings it all back).
+- **The list of periods** (the bars button in the toolbar, or `P`): every period in time
+  order, its dates and how many events it has, and an eye that **hides** it — its bar leaves
+  the strip, and so does an event once all its periods are hidden (unless "Keep the events
+  of hidden periods" is ticked). Hidden periods wait in a section of their own, where an
+  eye or a click on the name shows them again; Hide all and Show all do every one, a
+  filter finds one by name.
+  While any period is hidden, one row under the bars says how many, with no names or dates;
+  a click on it opens the list at the hidden ones. Hiding is kept in the file and undone
+  like any edit. Beside the strip on a desktop, a bottom sheet on a phone.
 - **Crowded stretches**: a card is never shrunk or hidden for want of room. Where cards do
   not fit side by side, they lie over each other — a later event over an earlier one — and
   the one under the pointer comes to the top. Only zooming out hides cards, the smaller
@@ -115,6 +129,7 @@ disk.
 | + − 0 | zoom in, out, fit all |
 | Home End T | start, end, today |
 | / | search; ↑↓ walk the hits, Enter opens one |
+| P | the list of periods: show and hide them |
 | Tab, Shift+Tab | items in time order; Enter opens the details |
 | E | edit the focused item (or toggle edit mode); N new event; Delete delete |
 | Esc, Enter | while adding: put the kind down; fill in the form instead of clicking |

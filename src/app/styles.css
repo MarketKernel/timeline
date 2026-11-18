@@ -759,7 +759,8 @@ body.dropping::after {
 .dot,
 .era,
 .bar,
-.details-mark {
+.details-mark,
+.period-swatch {
   --cat-shown: color-mix(in oklab, var(--cat), white var(--lift));
 }
 
@@ -1277,6 +1278,47 @@ body.resizing .card-resize {
 
 .bar.selected {
   box-shadow: 0 0 0 1.5px var(--ink);
+}
+
+/* All the hidden periods in one row under the bars, kept in sight when the bars scroll: a click opens the list of periods. */
+.bars-hidden-row {
+  position: sticky;
+  bottom: 0;
+  padding: 0 8px 4px;
+  background: var(--paper);
+}
+
+.bars-hidden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 16px;
+  padding: 0 8px;
+  border: 1px dashed color-mix(in oklab, var(--ink-soft) 45%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: 500 12px/14px var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bars-hidden:hover {
+  border-color: var(--ink-soft);
+  background: var(--paper-sunk);
+  color: var(--ink);
+}
+
+.bars-hidden svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* With the list open, the row has nothing to add: it keeps its place, so the strip does not jump. */
+body.periods-open .bars-hidden-row {
+  visibility: hidden;
 }
 
 /* Rulers */
@@ -2161,6 +2203,361 @@ body.editing .details {
 
 .ruler--temporary .ruler-name {
   color: var(--today);
+}
+
+/* An event's periods, a period's events: steps from one to the other. */
+.details-period {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+
+.details-period-label {
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.details-period-name {
+  font: 600 14px/1.35 var(--serif);
+  color: var(--ink-soft);
+}
+
+.details-period-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.details-period-link:hover {
+  text-decoration: underline;
+}
+
+.details-period-note {
+  font: 400 12px var(--sans);
+  color: var(--ink-faint);
+}
+
+/* An event's periods in its window: one line each, ticked or not; only those its date falls within. */
+.period-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 13em;
+  padding: 2px 0;
+  overflow-y: auto;
+}
+
+.period-check {
+  display: flex;
+  gap: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.period-check .period-swatch {
+  flex: none;
+  width: 4px;
+  height: 14px;
+  margin: 0;
+  align-self: center;
+  border-radius: 2px;
+  background: var(--cat-shown);
+}
+
+.period-check-title {
+  font-weight: 600;
+}
+
+.period-check-meta {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.details-events {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.details-events-title {
+  margin: 0 0 6px;
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.details-events-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.details-event {
+  display: grid;
+  grid-template-columns: 10px auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+  width: calc(100% + 12px);
+  padding: 5px 6px;
+  margin: 0 -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.details-event:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+
+.details-event .details-mark {
+  align-self: center;
+  width: 8px;
+  height: 8px;
+}
+
+.details-event-date {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.details-event-title {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 14px;
+}
+
+.field-hint--warning {
+  color: var(--danger);
+}
+
+/* ---------- The list of periods: beside the strip on the left, a bottom sheet on a phone ---------- */
+
+.periods {
+  position: fixed;
+  z-index: 20;
+  top: calc(var(--toolbar) + var(--edit-bar) + 8px);
+  left: max(8px, var(--safe-left));
+  bottom: 48px;
+  width: min(320px, calc(100vw - 16px));
+  --edit-bar: 0px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule-strong);
+  border-radius: 12px;
+  background: var(--paper-raised);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+body:has(#search:not([hidden])) .periods {
+  top: calc(var(--toolbar) + var(--edit-bar) + 54px);
+}
+
+body.editing .periods {
+  --edit-bar: 44px;
+}
+
+.periods-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 4px 16px;
+}
+
+.periods-title {
+  margin: 0;
+  font: 600 1.05rem/1.2 var(--serif);
+}
+
+.periods-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 12px;
+}
+
+.periods-filter-box {
+  padding: 4px 8px 8px;
+}
+
+.periods-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.periods-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 0 0 8px;
+}
+
+.periods-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.periods-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--paper-sunk);
+  color: var(--ink-soft);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.periods-all {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.period-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.period-row {
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 2px 6px;
+  border-radius: 8px;
+}
+
+.period-row:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+}
+
+.period-row--selected {
+  background: color-mix(in oklab, var(--ink) 9%, transparent);
+}
+
+.period-swatch {
+  align-self: stretch;
+  margin: 5px 0;
+  border-radius: 2px;
+  background: var(--cat-shown);
+}
+
+.period-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.period-title {
+  overflow: hidden;
+  font: 600 14px/1.3 var(--serif);
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.period-meta {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-eye {
+  width: 32px;
+  height: 32px;
+}
+
+.period-eye svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A hidden period is greyed: its colour, its name, its eye shut. */
+.period-row--hidden .period-swatch {
+  opacity: 0.35;
+}
+
+.period-row--hidden .period-title {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.periods-empty {
+  margin: 2px 8px 6px;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.periods-foot {
+  margin: auto 8px 0;
+  padding-top: 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .periods {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 72dvh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .periods > .sheet-handle {
+    display: block;
+    flex: none;
+    margin: 8px auto 0;
+  }
+
+  /* One sheet at a time: an item's details go over the list, and the list is back when they close. */
+  body.details-open .periods {
+    display: none;
+  }
 }
 
 /* ---------- Settings and form fields ---------- */
@@ -3434,6 +3831,8 @@ body.dragging .bar {
   .minimap,
   .toasts,
   .details,
+  .periods,
+  .bars-hidden-row,
   .start {
     display: none !important;
   }

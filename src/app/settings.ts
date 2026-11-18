@@ -15,6 +15,8 @@ export interface Settings {
   autosave: boolean;
   /** Events with a small card: the footnotes. */
   showMinor: boolean;
+  /** An event is hidden once every period it is attached to is hidden. */
+  hidePeriodEvents: boolean;
   /** The anchor ruler (AM, age…), when the file has an anchor. */
   secondRuler: boolean;
   reduceMotion: boolean;
@@ -27,6 +29,7 @@ const DEFAULTS: Readonly<Settings> = {
   theme: 'system',
   autosave: true,
   showMinor: true,
+  hidePeriodEvents: true,
   secondRuler: true,
   reduceMotion: false,
   music: true,
@@ -56,6 +59,7 @@ export function loadSettings(): Settings {
     theme: raw.theme === 'light' || raw.theme === 'dark' || raw.theme === 'system' ? raw.theme : DEFAULTS.theme,
     autosave: bool('autosave'),
     showMinor: bool('showMinor'),
+    hidePeriodEvents: bool('hidePeriodEvents'),
     secondRuler: bool('secondRuler'),
     reduceMotion: bool('reduceMotion'),
     music: bool('music'),

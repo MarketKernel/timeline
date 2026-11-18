@@ -9,9 +9,9 @@
  */
 
 import { formatDuration, formatRange, formatSpread, formatWhen, isNow } from '../core/dates';
-import { t } from '../core/i18n';
+import { t, tn } from '../core/i18n';
 import { parseMarkdown, type Inline } from '../core/markdown';
-import { colorOf, picturesOf, spanOf, type Doc, type Item } from '../core/model';
+import { colorOf, eventsOf, picturesOf, spanOf, type Doc, type Item } from '../core/model';
 import { byId, h } from './dom';
 import { detailsGallery, type Gallery } from './gallery';
 import type { ImageStore } from './images';
@@ -22,6 +22,10 @@ export interface DetailsHandlers {
   edit(id: string): void;
   /** Makes the item the anchor of the second ruler. */
   anchor(id: string): void;
+  /** A new event, attached to this period. */
+  addToPeriod(id: string): void;
+  /** Whether the strip has put an item out of sight: a hidden period, or an event whose periods are all hidden. */
+  hidden(item: Item): boolean;
   close(): void;
   /** Whether edit mode is on: Edit and "count from here" appear only then. */
   editing(): boolean;
@@ -119,6 +123,57 @@ export class Details {
         ),
       );
     }
+    // An event's periods, a period's events: each a step to the other.
+    const periods = item.kind === 'event' ? doc.items.filter((i) => item.periods?.includes(i.id)) : [];
+    if (periods.length) {
+      parts.push(
+        h(
+          'div',
+          { class: 'details-period' },
+          h('span', { class: 'details-period-label' }, periods.length === 1 ? t('details', 'Period') : t('details', 'Periods')),
+          ...periods.map((period) =>
+            this.handlers.hidden(period)
+              ? h('span', { class: 'details-period-name', lang, style: `--cat:${colorOf(period, doc)}` }, period.title, h('span', { class: 'details-period-note' }, ` · ${t('details', 'hidden')}`))
+              : h(
+                  'button',
+                  { class: 'details-period-name details-period-link', type: 'button', lang, style: `--cat:${colorOf(period, doc)}`, onclick: () => this.handlers.show(period.id) },
+                  h('span', { class: 'details-mark', 'aria-hidden': 'true' }),
+                  period.title,
+                ),
+          ),
+        ),
+      );
+    }
+    if (item.kind === 'period') {
+      const events = eventsOf(doc, item.id);
+      if (events.length) {
+        parts.push(
+          h(
+            'section',
+            { class: 'details-events', 'aria-label': t('details', 'Events of this period') },
+            h('h3', { class: 'details-events-title' }, tn('details', '{count} event in this period', '{count} events in this period', events.length)),
+            h(
+              'ul',
+              { class: 'details-events-list' },
+              ...events.map((event) =>
+                h(
+                  'li',
+                  {},
+                  h(
+                    'button',
+                    { class: 'details-event', type: 'button', style: `--cat:${colorOf(event, doc)}`, onclick: () => this.handlers.show(event.id) },
+                    h('span', { class: 'details-mark', 'aria-hidden': 'true' }),
+                    h('span', { class: 'details-event-date' }, formatWhen(event.start)),
+                    h('span', { class: 'details-event-title', lang }, event.title),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     const meta: Node[] = [];
     const kinds = { event: t('details', 'Event'), period: t('details', 'Period'), era: t('details', 'Era') };
     meta.push(h('span', { class: 'chip chip--plain' }, kinds[item.kind]));
@@ -140,6 +195,9 @@ export class Details {
     const actions = h('div', { class: 'details-actions' });
     if (this.handlers.editing()) {
       actions.append(h('button', { class: 'button', type: 'button', onclick: () => this.handlers.edit(item.id) }, t('details', 'Edit')));
+      if (item.kind === 'period') {
+        actions.append(h('button', { class: 'text-button', type: 'button', onclick: () => this.handlers.addToPeriod(item.id) }, t('details', 'Add an event to it')));
+      }
       if (item.kind === 'period' || item.kind === 'event') {
         actions.append(h('button', { class: 'text-button', type: 'button', onclick: () => this.handlers.anchor(item.id) }, t('details', 'Count years from here')));
       }

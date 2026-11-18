@@ -89,6 +89,9 @@
       <button id="music-toggle" class="icon-button music-toggle" type="button" aria-pressed="true" title="Background music" aria-label="Background music" data-i18n-attr="toolbar" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="music-on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="music-off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
       </button>
+      <button id="periods-button" class="icon-button" type="button" title="Periods: show and hide them (P)" aria-label="Periods" aria-pressed="false" aria-controls="periods" data-i18n-attr="toolbar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M9 12h11M4 17h7" stroke-width="3"/></svg>
+      </button>
       <button id="search-button" class="icon-button" type="button" title="Search (/)" aria-label="Search" data-i18n-attr="toolbar">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
       </button>
@@ -154,6 +157,18 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
   <div id="details-body" class="details-body"></div>
+</aside>
+
+<!-- ============================== Periods ============================== -->
+<aside id="periods" class="periods" role="dialog" aria-modal="false" aria-labelledby="periods-title" hidden>
+  <div class="sheet-handle" aria-hidden="true"></div>
+  <header class="periods-head">
+    <h2 id="periods-title" class="periods-title" data-i18n="periods">Periods</h2>
+    <button id="periods-close" class="icon-button" type="button" title="Close (Esc)" aria-label="Close" data-i18n-attr="periods">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div id="periods-body" class="periods-body"></div>
 </aside>
 
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>

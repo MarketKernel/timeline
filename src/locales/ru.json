@@ -8,7 +8,17 @@
     "Edit": "Изменить",
     "Count years from here": "Считать годы отсюда",
     "Close (Esc)": "Закрыть (Esc)",
-    "Close": "Закрыть"
+    "Close": "Закрыть",
+    "hidden": "скрыт",
+    "Events of this period": "События этого периода",
+    "{count} events in this period": {
+      "one": "{count} событие в этом периоде",
+      "few": "{count} события в этом периоде",
+      "many": "{count} событий в этом периоде",
+      "other": "{count} события в этом периоде"
+    },
+    "Add an event to it": "Добавить в него событие",
+    "Periods": "Периоды"
   },
   "editor": {
     "Year": "Год",
@@ -118,7 +128,22 @@
     "Huge: a turning point, the largest card, its gallery beside its picture.": "Огромная: поворотный момент, самая большая карточка, галерея рядом с картинкой.",
     "Size — the larger, the more it matters": "Размер — чем больше, тем важнее",
     "“{title}” is {size} now: cards that size show from closer. Zoom in to see it.": "«{title}» теперь {size}: такие карточки видны ближе. Приблизьте, чтобы её увидеть.",
-    "Keep the card where it was dragged to; its date stays as set above": "Оставить карточку там, куда её перетащили; дата остаётся такой, как задана выше"
+    "Keep the card where it was dragged to; its date stays as set above": "Оставить карточку там, куда её перетащили; дата остаётся такой, как задана выше",
+    "hidden": "скрыт",
+    "The periods are offered once the date is a date.": "Периоды появятся, когда дата будет введена верно.",
+    "“{title}” does not take in this date: saved so, the event leaves it.": "«{title}» не включает эту дату: если сохранить так, событие выйдет из него.",
+    "{count} events are outside the new dates of “{title}” and are no longer attached to it": {
+      "one": "{count} событие вне новых дат «{title}» и больше к нему не привязано",
+      "few": "{count} события вне новых дат «{title}» и больше к нему не привязаны",
+      "many": "{count} событий вне новых дат «{title}» и больше к нему не привязаны",
+      "other": "{count} события вне новых дат «{title}» и больше к нему не привязаны"
+    },
+    "Periods": "Периоды",
+    "{titles} do not take in this date: saved so, the event leaves them.": "{titles} не включают эту дату: если сохранить так, событие выйдет из них.",
+    "Tick the periods it is about, as many as it takes: only those this date falls within are offered. Each period’s details list its events.": "Отметьте периоды, к которым относится событие, — сколько нужно. Предлагаются только те, в которые входит дата. В подробностях каждого периода — список его событий.",
+    "No period takes in this date.": "Ни один период не включает эту дату.",
+    "“{title}” is only in hidden periods, out of sight with them: the list of periods shows them again.": "«{title}» только в скрытых периодах и скрыто вместе с ними: список периодов показывает их снова.",
+    "“{title}”": "«{title}»"
   },
   "ui": {
     "Cancel": "Отмена",
@@ -230,7 +255,9 @@
     "More": "Ещё",
     "Background music: {title}": "Фоновая музыка: {title}",
     "Background music": "Фоновая музыка",
-    "About this timeline": "О хронологии"
+    "About this timeline": "О хронологии",
+    "Periods: show and hide them (P)": "Периоды: показать и скрыть (P)",
+    "Periods": "Периоды"
   },
   "menu": {
     "Save": "Сохранить",
@@ -282,7 +309,14 @@
       "few": "{count} картинки",
       "many": "{count} картинок",
       "other": "{count} картинки"
-    }
+    },
+    "{count} hidden periods": {
+      "one": "{count} скрытый период",
+      "few": "{count} скрытых периода",
+      "many": "{count} скрытых периодов",
+      "other": "{count} скрытого периода"
+    },
+    "Show the list of periods (P)": "Открыть список периодов (P)"
   },
   "minimap": {
     "Visible range": "Видимый отрезок"
@@ -595,5 +629,48 @@
     "Website": "Сайт",
     "Created": "Создана",
     "Not specified": "Не указано"
+  },
+  "periods": {
+    "Periods": "Периоды",
+    "Close (Esc)": "Закрыть (Esc)",
+    "Close": "Закрыть",
+    "Find a period": "Найти период",
+    "Shown": "Показаны",
+    "Hidden": "Скрыты",
+    "Hide all": "Скрыть все",
+    "Show all": "Показать все",
+    "Hide these": "Скрыть найденные",
+    "Show these": "Показать найденные",
+    "Every period is hidden.": "Все периоды скрыты.",
+    "None. The eye beside a period hides it; it waits here to be shown again.": "Нет. Глаз рядом с периодом скрывает его — и он ждёт здесь, пока его снова не покажут.",
+    "No shown period has this in its name.": "Среди показанных нет периода с таким названием.",
+    "No hidden period has this in its name.": "Среди скрытых нет периода с таким названием.",
+    "This timeline has no periods yet. In edit mode, Period on the edit bar adds one: drag along the strip from its start to its end.": "В этой хронологии пока нет периодов. В режиме правки их добавляет кнопка «Период» на панели правки: проведите по ленте от начала периода до его конца.",
+    "Show “{title}”": "Показать «{title}»",
+    "Hide “{title}”": "Скрыть «{title}»",
+    "Show it and go to it": "Показать и перейти к нему",
+    "Go to it": "Перейти к нему",
+    "{count} events": {
+      "one": "{count} событие",
+      "few": "{count} события",
+      "many": "{count} событий",
+      "other": "{count} события"
+    },
+    "Hide {title}": "Скрытие: {title}",
+    "Show {title}": "Показ: {title}",
+    "Hide {count} periods": {
+      "one": "Скрытие {count} периода",
+      "few": "Скрытие {count} периодов",
+      "many": "Скрытие {count} периодов",
+      "other": "Скрытие {count} периода"
+    },
+    "Show {count} periods": {
+      "one": "Показ {count} периода",
+      "few": "Показ {count} периодов",
+      "many": "Показ {count} периодов",
+      "other": "Показ {count} периода"
+    },
+    "Keep the events of hidden periods": "Оставлять события скрытых периодов",
+    "Otherwise an event is hidden once every period it is attached to is.": "Иначе событие скрывается, когда скрыты все периоды, к которым оно привязано."
   }
 }

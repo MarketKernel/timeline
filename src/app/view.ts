@@ -19,7 +19,7 @@ import { dateOf, dayOf, endDay, formatDuration, formatRange, formatWhen, formatY
 import { language, t, tn } from '../core/i18n';
 import { layoutBars, layoutCards, type CardInput, type Placed } from '../core/layout';
 import { plainText } from '../core/markdown';
-import { colorOf, extentOf, picturesOf, rankOf, spanOf, type CardSize, type Doc, type ImageInfo, type Item } from '../core/model';
+import { colorOf, extentOf, hiddenPeriods, picturesOf, rankOf, spanOf, type CardSize, type Doc, type ImageInfo, type Item } from '../core/model';
 import { anchorRuler, ruler, type Tick } from '../core/ruler';
 import { hexToOklch } from '../core/style';
 import { clamp, clampCenter, dayAt, fitView, scaleBar, xOf, zoomAt, zoomLimits, type View } from '../core/scale';
@@ -42,6 +42,8 @@ export interface StripHandlers {
   viewChanged(): void;
   /** The view came to rest after a pan, a zoom or a jump. */
   settled(): void;
+  /** The row of hidden periods under the bars was clicked: the list of periods is wanted. */
+  showPeriods(): void;
 }
 
 /**
@@ -115,6 +117,8 @@ export class Strip {
   doc: Doc | null = null;
   view: View = { center: 0, pxPerDay: 1, width: 800 };
   showMinor = true;
+  /** An event goes out of sight once all its periods are hidden. */
+  hidePeriodEvents = true;
   secondRuler = true;
   reduceMotion = false;
   selected: string | null = null;
@@ -125,6 +129,8 @@ export class Strip {
   tempAnchor: { at: { y: number; m?: number; d?: number }; label: string } | null = null;
 
   private extent: [number, number] = [0, 1];
+  /** The periods put out of sight, worked out once a change: every build asks of every item. */
+  private hidden = new Set<string>();
   /** How far each event's card stands out of its dot, left and right, px: room is left for it at the ends of the strip. */
   private reach: { day: number; left: number; right: number }[] = [];
   /** Where each period's bar runs and how wide its name is, px: a name that does not fit is written after the bar. */
@@ -147,6 +153,9 @@ export class Strip {
   private readonly erasLayer: HTMLElement;
   private readonly barsBox: HTMLElement;
   private readonly barsLayer: HTMLElement;
+  /** Under the bars while some period is hidden: one row for all of them, which opens the list of periods. */
+  private readonly hiddenRow: HTMLElement;
+  private readonly hiddenButton: HTMLButtonElement;
   private readonly rulerLayer: HTMLElement;
   private readonly anchorBox: HTMLElement;
   private readonly anchorLayer: HTMLElement;
@@ -178,7 +187,14 @@ export class Strip {
     this.layers = [this.cardsLayer, this.axisLayer, this.erasLayer, this.barsLayer, this.rulerLayer, this.anchorLayer, this.overlayLayer];
     this.scaleBarEl = h('div', { class: 'scalebar', 'aria-hidden': 'true' });
     this.cardsArea = h('div', { class: 'cards-area' }, this.cardsLayer, this.scaleBarEl);
-    this.barsBox = h('div', { class: 'bars' }, h('div', { class: 'bars-inner' }, this.barsLayer));
+    this.hiddenButton = h(
+      'button',
+      { class: 'bars-hidden', type: 'button', onclick: () => this.handlers.showPeriods() },
+      icon('M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z', 'M4 4l16 16'),
+      h('span', { class: 'bars-hidden-label' }),
+    );
+    this.hiddenRow = h('div', { class: 'bars-hidden-row', hidden: true }, this.hiddenButton);
+    this.barsBox = h('div', { class: 'bars' }, h('div', { class: 'bars-inner' }, this.barsLayer), this.hiddenRow);
     this.anchorLabel = h('span', { class: 'ruler-name' });
     this.rulerContext = h('span', { class: 'ruler-name ruler-context' });
     this.anchorBox = h('div', { class: 'ruler ruler--anchor' }, this.anchorLayer, this.anchorLabel);
@@ -218,6 +234,7 @@ export class Strip {
     const doc = this.doc;
     this.version++;
     this.barCache = null;
+    this.hidden = doc ? hiddenPeriods(doc) : new Set();
     this.extent = doc ? extentOf(doc) : [0, 1];
     this.reach = (doc?.items ?? [])
       .filter((item) => item.kind === 'event' && this.visibleItem(item))
@@ -238,7 +255,7 @@ export class Strip {
     // A period too short for its name has it written after its end: that needs room too, at a zoom.
     const now = new Date();
     this.labels = (doc?.items ?? [])
-      .filter((item) => item.kind === 'period' && item.end)
+      .filter((item) => item.kind === 'period' && item.end && this.visibleItem(item))
       .map((item) => {
         const [start, end] = spanOf(item, now);
         return { start, end, width: textWidth(item.title, FONT_BAR) + 12 };
@@ -484,9 +501,19 @@ export class Strip {
    * Building the layers
    * ---------------------------------------------------------------- */
 
-  /** Whether the strip shows an item at all: small events go when Settings hides them. */
+  /** Whether the strip shows an item at all: small events go when Settings hides them; hidden periods go, and the events only in them. */
   visibleItem(item: Item): boolean {
-    return !(item.kind === 'event' && rankOf(item) === 3 && !this.showMinor);
+    return !(item.kind === 'event' && rankOf(item) === 3 && !this.showMinor) && !this.hiddenItem(item);
+  }
+
+  /**
+   * Put out of sight in the list of periods: a hidden period, or (unless the
+   * reader keeps them) an event whose periods are all hidden — while one of
+   * them shows, so does the event.
+   */
+  hiddenItem(item: Item): boolean {
+    if (item.kind === 'period') return this.hidden.has(item.id);
+    return item.kind === 'event' && this.hidePeriodEvents && !!item.periods?.length && item.periods.every((id) => this.hidden.has(id));
   }
 
   /** The largest rank shown as a card at this zoom: only the large and huge cards at the coarsest. */
@@ -592,7 +619,7 @@ export class Strip {
       return e >= near[0] && s <= near[1];
     });
     const px = this.view.pxPerDay;
-    const key = `${this.version}:${px}:${lang}:${this.showMinor}:${periods.map((p) => p.id).join()}`;
+    const key = `${this.version}:${px}:${lang}:${this.showMinor}:${this.hidePeriodEvents}:${periods.map((p) => p.id).join()}`;
     if (!this.barCache || this.barCache.key !== key) {
       const bars = periods.map((item) => {
         const [s0, e0] = spanOf(item, now);
@@ -606,7 +633,16 @@ export class Strip {
     }
     const { row, rows } = this.barCache;
     (this.barsBox.firstElementChild as HTMLElement).style.height = `${rows * BAR_ROW + 8}px`;
-    this.barsBox.hidden = rows === 0;
+    // The hidden periods are one row, with no names and no dates: how many there are, and the way to the list.
+    const hidden = this.hidden.size;
+    this.barsBox.hidden = rows === 0 && hidden === 0;
+    this.hiddenRow.hidden = hidden === 0;
+    if (hidden) {
+      const label = tn('strip', '{count} hidden period', '{count} hidden periods', hidden);
+      const span = this.hiddenButton.lastElementChild as HTMLElement;
+      if (span.textContent !== label) span.textContent = label;
+      this.hiddenButton.title = t('strip', 'Show the list of periods (P)');
+    }
 
     const alive = new Set<string>();
     for (const item of periods) {
@@ -948,8 +984,9 @@ export class Strip {
     return this.cardEls.get(id)?.card ?? this.barEls.get(id) ?? this.eraEls.get(id) ?? (this.dotEls.get(id)?.tabIndex === 0 ? this.dotEls.get(id)! : null);
   }
 
-  /** Pixels on the right the details panel covers; reveal() keeps items out from under it. */
+  /** Pixels on the right the details panel covers, and on the left the list of periods; reveal() keeps items out from under them. */
   coveredRight = 0;
+  coveredLeft = 0;
 
   /** While a card is dragged: its pointer leans from the dot to where the card is being put, in row `row`. */
   leanPointer(id: string, shift: number, row: number): void {
@@ -957,18 +994,30 @@ export class Strip {
     if (pointer) lean(pointer, shift, AXIS_PAD + row * ROW);
   }
 
-  /** Brings an item on screen (centred in the free part, at a zoom where it reads). */
+  /**
+   * Brings an item on screen (centred in the free part, at a zoom where it
+   * reads). One already in view stays where it is: a period clicked on its
+   * bar is never zoomed out from under the pointer, however far it runs past
+   * the edges.
+   */
   reveal(item: Item, animate = true): void {
     const [s, e] = spanOf(item);
-    const free = this.view.width - this.coveredRight;
+    const left = this.coveredLeft;
+    const free = this.view.width - this.coveredRight - left;
     const x0 = this.xOf(s);
-    const x1 = item.kind === 'event' ? x0 + 180 : this.xOf(e);
-    if (x0 >= 40 && Math.min(x1, x0 + free * 0.5) <= free - 24) return;
+    if (item.kind === 'event') {
+      if (x0 >= left + 40 && x0 + Math.min(180, free * 0.5) <= left + free - 24) return;
+    } else {
+      // In view: all of it, or enough to read its name, which keeps to the part that shows.
+      const x1 = this.xOf(e);
+      const seen = Math.min(x1, left + free - 24) - Math.max(x0, left + 24);
+      if (seen >= Math.min(x1 - x0, 120)) return;
+    }
     let px = this.view.pxPerDay;
     if (item.end && (e - s) * px > free * 0.8) px = (free * 0.6) / (e - s);
-    // Centre the item in the part of the strip the panel leaves free.
+    // Centre the item in the part of the strip the panels leave free.
     const middle = item.kind === 'event' ? s : (s + e) / 2;
-    this.goTo(middle + (this.view.width / 2 - free / 2) / px, px, animate);
+    this.goTo(middle + (this.view.width / 2 - (left + free / 2)) / px, px, animate);
   }
 
   /* ---------------------------------------------------------------- *
@@ -1131,6 +1180,8 @@ export class Strip {
           event.preventDefault();
           return;
         }
+        // The row of hidden periods is a button of its own: a click on it keeps the selection.
+        if ((event.target as HTMLElement).closest('.bars-hidden')) return;
         const target = (event.target as HTMLElement).closest<HTMLElement>('[data-id]');
         this.handlers.select(target?.dataset.id ?? null);
       },
@@ -1138,6 +1189,7 @@ export class Strip {
     );
 
     root.addEventListener('dblclick', (event) => {
+      if ((event.target as HTMLElement).closest('.bars-hidden')) return;
       const target = (event.target as HTMLElement).closest<HTMLElement>('[data-id]');
       if (target?.dataset.id) {
         this.handlers.open(target.dataset.id);

@@ -43,14 +43,22 @@ type Events = {
   /** The document changed (an edit, an undo, a restored draft). */
   changed: void;
   select: string | null;
+  /** What is selected now, after a selection was made (reading.ts select()). */
+  selected: string | null;
   open: string;
   settings: void;
+  /** A reader's setting changed (updateSettings). */
+  settingsChanged: void;
   editing: boolean;
   language: void;
   /** The start screen is shown: the recent files and the shelf are drawn again. */
   start: void;
   /** "Count years from here" on an item. */
   anchor: string;
+  /** "Add an event to it" on a period: a new event, attached to it. */
+  addToPeriod: string;
+  /** The list of periods is wanted, at its hidden ones: the row of hidden periods under the bars. */
+  periods: void;
   /** The PWA's update state changed. */
   update: void;
 };

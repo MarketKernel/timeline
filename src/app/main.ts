@@ -21,6 +21,7 @@ import { setupInfo } from './info';
 import { setupMusic, syncMusic } from './music';
 import { applyStyle } from './look';
 import { newTimeline, setupProperties } from './properties';
+import { setupPeriods } from './periods';
 import { setupReading } from './reading';
 import { renderShelf } from './shelf';
 import { applyUpdate, canUpdate, checkForUpdate, isPwa, justUpdated, startUpdates, updateState, type UpdateState } from './update';
@@ -67,7 +68,13 @@ export function updateSettings(change: Partial<Settings>): void {
   strip.showMinor = app.settings.showMinor;
   strip.secondRuler = app.settings.secondRuler;
   strip.reduceMotion = app.settings.reduceMotion;
+  if ('hidePeriodEvents' in change) {
+    strip.hidePeriodEvents = app.settings.hidePeriodEvents;
+    // Which events show changes the room the strip leaves at its ends, not only the layout.
+    if (app.session) strip.changed();
+  }
   if (app.session) strip.refresh();
+  emit('settingsChanged');
 }
 
 /* ------------------------------------------------------------------ *
@@ -432,8 +439,10 @@ function start(): void {
       updateScaleLabel();
     },
     settled: () => rememberPosition(),
+    showPeriods: () => emit('periods'),
   });
   app.strip.showMinor = app.settings.showMinor;
+  app.strip.hidePeriodEvents = app.settings.hidePeriodEvents;
   app.strip.secondRuler = app.settings.secondRuler;
   app.strip.reduceMotion = app.settings.reduceMotion;
   app.minimap = new Minimap(byId('minimap'), app.strip);
@@ -465,6 +474,8 @@ function start(): void {
     setupEras();
   }
   setupMusic((on) => updateSettings({ music: on }));
+  // The list of periods: in an exported page too — hiding there lasts as long as the page is open.
+  setupPeriods(updateSettings);
   setupProperties();
   setupInfo();
   on('settings', () => void settingsSheet({ settings: app.settings, change: updateSettings, extra: versionBlock, readOnly: app.readOnly }));

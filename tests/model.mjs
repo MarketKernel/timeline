@@ -1,7 +1,7 @@
 /** timeline.json: validation with exact warnings, forward compatibility, deterministic output (Task §3, §11). */
 import { checker, load } from '../tools/load.mjs';
 
-const { parseDoc, serializeDoc, colorOf, rankOf, extentOf, usedImages, missingImages, ModelError, ID_PATTERN, parseMarkdown, plainText, dayOf, compareItems, inTimeOrder } = await load('core/model', 'core/markdown', 'core/dates');
+const { parseDoc, serializeDoc, colorOf, rankOf, extentOf, usedImages, missingImages, ModelError, ID_PATTERN, parseMarkdown, plainText, dayOf, compareItems, inTimeOrder, periodHolds, periodsAt, eventsOf, detachFrom, hiddenPeriods } = await load('core/model', 'core/markdown', 'core/dates');
 const { check, done } = checker();
 
 const good = {
@@ -309,6 +309,67 @@ for (const [name, json, expected] of /** @type {[string, unknown, string][]} */ 
     return { id: `x${Math.floor(random() * 50)}-${i}`, kind, start, title: 'T', ...(kind === 'event' ? {} : { end: { y: y + 1 } }) };
   });
   check('inTimeOrder sorts as compareItems does', inTimeOrder(items).map((i) => i.id), [...items].sort(compareItems).map((i) => i.id));
+}
+
+
+{
+  // An event attached to periods, one or several; a period put out of sight.
+  const base = { format: 'timeline', version: 1, meta: { id: 'p', kind: 'history' }, title: 'P' };
+  const items = [
+    // The event comes before its periods in the list: the links are checked once every item is read.
+    { id: 'sputnik', kind: 'event', start: { y: 1957, m: 10, d: 4 }, title: 'Sputnik', periods: ['race', 'cold'] },
+    { id: 'race', kind: 'period', start: { y: 1957, m: 10 }, end: { y: 1975 }, title: 'Space race', hidden: true },
+    // A period named twice is kept once.
+    { id: 'moon', kind: 'event', start: { y: 1969 }, title: 'Moon', periods: ['race', 'race'] },
+    { id: 'war', kind: 'period', start: { y: 1939 }, end: { y: 1945 }, title: 'War', hidden: false },
+    { id: 'cold', kind: 'period', start: { y: 1947 }, end: { y: 1991 }, title: 'Cold war' },
+    { id: 'none', kind: 'event', start: { y: 1960 }, title: 'None', periods: [] },
+  ];
+  const { doc, warnings } = parseDoc({ ...base, items });
+  check('period links and a hidden period read cleanly', warnings, []);
+  check('the links are kept, in the order given, each once', doc.items.filter((i) => i.periods).map((i) => [i.id, i.periods]), [['sputnik', ['race', 'cold']], ['moon', ['race']]]);
+  check('…an empty list is no list', 'periods' in doc.items.find((i) => i.id === 'none'), false);
+  check('hidden: true is kept, hidden: false is what leaving it out says', doc.items.filter((i) => i.kind === 'period').map((i) => i.hidden), [true, undefined, undefined]);
+  const json = JSON.parse(serializeDoc(doc));
+  check('…and written: periods after the tags, hidden last', [Object.keys(json.items.find((i) => i.id === 'sputnik')), Object.keys(json.items.find((i) => i.id === 'race')).at(-1)], [['id', 'kind', 'start', 'title', 'periods'], 'hidden']);
+  check('hidden: false is not written, nor an empty list', ['hidden' in json.items.find((i) => i.id === 'war'), 'periods' in json.items.find((i) => i.id === 'none')], [false, false]);
+  check('the round trip is stable', serializeDoc(parseDoc(json).doc), serializeDoc(doc));
+
+  const bad = parseDoc({
+    ...base,
+    items: [
+      ...items,
+      { id: 'lost', kind: 'event', start: { y: 1960 }, title: 'Lost', periods: ['nowhere', 'race'] },
+      { id: 'era-link', kind: 'event', start: { y: 1960 }, title: 'To an era', periods: ['jet'] },
+      { id: 'jet', kind: 'era', start: { y: 1950 }, end: { y: 1990 }, title: 'Jet age', hidden: true },
+      { id: 'sub', kind: 'period', start: { y: 1960 }, end: { y: 1961 }, title: 'Sub', periods: ['race'] },
+      { id: 'shy', kind: 'event', start: { y: 1960 }, title: 'Shy', hidden: true },
+      { id: 'odd', kind: 'period', start: { y: 1960 }, end: { y: 1961 }, title: 'Odd', hidden: 'yes' },
+      { id: 'single', kind: 'event', start: { y: 1960 }, title: 'Single', periods: 'race' },
+      { id: 'mixed', kind: 'event', start: { y: 1960 }, title: 'Mixed', periods: ['cold', 7] },
+    ],
+  });
+  check(
+    'a link to no period, to an era, from a period; not a list, not an id; hidden on an era, an event, not true — each left out',
+    bad.warnings.map((w) => w.path).sort(),
+    ['items[6].periods[0]', 'items[7].periods[0]', 'items[8].hidden', 'items[9].periods', 'items[10].hidden', 'items[11].hidden', 'items[12].periods', 'items[13].periods[1]'].sort(),
+  );
+  check('…the good links beside a bad one stay, and the items themselves', [bad.doc.items.find((i) => i.id === 'lost').periods, bad.doc.items.find((i) => i.id === 'mixed').periods, bad.doc.items.length], [['race'], ['cold'], 14]);
+
+  const race = doc.items.find((i) => i.id === 'race');
+  // Noon by the local clock: the same day in every time zone.
+  const now = new Date(2026, 9, 13, 12);
+  check('a period takes in a date whose span meets its own', [{ y: 1957 }, { y: 1957, m: 9 }, { y: 1957, m: 10, d: 1 }, { y: 1975, m: 12, d: 31 }, { y: 1976 }, { y: 1956 }].map((w) => periodHolds(race, w, now)), [true, false, true, true, false, false]);
+  check('…an event or an era takes in nothing', [periodHolds(doc.items.find((i) => i.id === 'moon'), { y: 1969 }, now)], [false]);
+  const open = { id: 'open', kind: 'period', start: { y: 2000 }, end: { now: true }, title: 'Open' };
+  check('…a period to this day takes in today, not tomorrow’s year', [periodHolds(open, { y: 2026, m: 10, d: 13 }, now), periodHolds(open, { y: 2027 }, now)], [true, false]);
+  check('the periods a date falls within, in time order', periodsAt(doc, { y: 1944 }, now).map((i) => i.id), ['war']);
+  check('…several where they overlap', periodsAt(doc, { y: 1969 }, now).map((i) => i.id), ['cold', 'race']);
+  check('…none for a date outside them all', periodsAt(doc, { y: 1946 }, now), []);
+  check('a period’s events, in time order: an event in two periods is in both', [eventsOf(doc, 'race').map((i) => i.id), eventsOf(doc, 'cold').map((i) => i.id)], [['sputnik', 'moon'], ['sputnik']]);
+  const sputnik = doc.items.find((i) => i.id === 'sputnik');
+  check('detached from one period, an event keeps the others; from its last, it has none', [detachFrom(sputnik, 'race').periods, 'periods' in detachFrom(detachFrom(sputnik, 'race'), 'cold'), sputnik.periods], [['cold'], false, ['race', 'cold']]);
+  check('the hidden periods', [...hiddenPeriods(doc)], ['race']);
 }
 
 done('model');

@@ -154,6 +154,15 @@ export interface Item {
    * (negative: to the left). Its date and its dot stay; a line joins them.
    */
   shift?: number;
+  /**
+   * An event's periods: the ids of the periods it is about, each one's dates
+   * taking in the event's date — a first flight is in both brothers' lives and
+   * in the age of powered flight. Each period's details list it; it is hidden
+   * once every one of them is.
+   */
+  periods?: string[];
+  /** A period put out of sight: its bar is not drawn; the list of periods shows it again. */
+  hidden?: boolean;
   extra?: Extra;
 }
 
@@ -248,7 +257,7 @@ const KEYS = {
   style: ['paper', 'texture', 'color', 'font'],
   music: ['file', 'ext', 'title', 'credit'],
   view: ['center', 'scale'],
-  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'image', 'gallery', 'size', 'shape', 'lane', 'shift'],
+  item: ['id', 'kind', 'start', 'end', 'title', 'text', 'refs', 'links', 'color', 'background', 'tags', 'periods', 'image', 'gallery', 'size', 'shape', 'lane', 'shift', 'hidden'],
   when: ['y', 'm', 'd', 'approx', 'spread'],
 } as const;
 
@@ -426,6 +435,8 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
 
   // items
   const itemIds = new Set<string>();
+  /** Events that name their periods: checked once every item is read, as a period may come after its events. */
+  const periodLinks: { item: Item; id: string; path: string }[] = [];
   if (json.items !== undefined && !Array.isArray(json.items)) dropped('items');
   (Array.isArray(json.items) ? json.items : []).forEach((value: unknown, i: number) => {
     const path = `items[${i}]`;
@@ -521,11 +532,30 @@ export function parseDoc(json: unknown): { doc: Doc; warnings: Warning[] } {
       if (kind === 'event' && Number.isInteger(value.shift) && Math.abs(value.shift as number) <= MAX_SHIFT) item.shift = value.shift as number;
       else dropped(`${path}.shift`);
     }
+    if (value.periods !== undefined) {
+      if (kind === 'event' && Array.isArray(value.periods)) {
+        value.periods.forEach((link: unknown, j: number) => {
+          if (isString(link) && ID_PATTERN.test(link)) periodLinks.push({ item, id: link, path: `${path}.periods[${j}]` });
+          else dropped(`${path}.periods[${j}]`);
+        });
+      } else dropped(`${path}.periods`);
+    }
+    if (value.hidden !== undefined) {
+      // `false` is what leaving it out says.
+      if (kind === 'period' && value.hidden === true) item.hidden = true;
+      else if (value.hidden !== false) dropped(`${path}.hidden`);
+    }
     const extra = extraOf(value, ITEM_KEYS);
     if (extra) item.extra = extra;
     itemIds.add(id);
     doc.items.push(item);
   });
+  // An event keeps a period only if that is a period of this file; one named twice is kept once.
+  const periodIds = new Set(doc.items.filter((i) => i.kind === 'period').map((i) => i.id));
+  for (const link of periodLinks) {
+    if (!periodIds.has(link.id)) dropped(link.path);
+    else if (!link.item.periods?.includes(link.id)) (link.item.periods ??= []).push(link.id);
+  }
 
   if (json.cover !== undefined) {
     if (isString(json.cover) && doc.images[json.cover]) doc.cover = json.cover;
@@ -665,12 +695,14 @@ function docToJson(doc: Doc): Record<string, unknown> {
         ['color', item.color],
         ['background', item.background],
         ['tags', item.tags],
+        ['periods', item.periods?.length ? item.periods : undefined],
         ['image', item.image],
         ['gallery', item.gallery?.length ? item.gallery : undefined],
         ['size', item.size],
         ['shape', item.shape],
         ['lane', item.lane],
         ['shift', item.shift],
+        ['hidden', item.hidden || undefined],
       ],
       item.extra,
     ),
@@ -810,6 +842,34 @@ export function spanOf(item: Item, now = new Date()): [number, number] {
   const end = isNow(item.end) ? todayDay(now) + 1 : midOf(item.end);
   return end > start ? [start, end] : [startOf(item.start), endDay(item.end, now)];
 }
+
+/**
+ * Whether a period takes in a date: the date's own span — a year, a month, a
+ * day — meets the period's, from the first day of its start to the last day
+ * of its end. "1957" is in "Oct 1957 – 1975"; "1956" is not.
+ */
+export function periodHolds(period: Item, when: When, now = new Date()): boolean {
+  if (period.kind !== 'period' || !period.end) return false;
+  return startOf(when) < endDay(period.end, now) && endOf(when) > startOf(period.start);
+}
+
+/** The periods a date falls within, in time order: what an event can be attached to. */
+export const periodsAt = (doc: Doc, when: When, now = new Date()): Item[] => inTimeOrder(doc.items.filter((item) => periodHolds(item, when, now)));
+
+/** The events attached to a period, in time order. */
+export const eventsOf = (doc: Doc, periodId: string): Item[] => inTimeOrder(doc.items.filter((item) => item.kind === 'event' && !!item.periods?.includes(periodId)));
+
+/** An event no longer attached to a period: a copy, its other periods kept; `periods` goes once none is left. */
+export function detachFrom(event: Item, periodId: string): Item {
+  const next: Item = { ...event };
+  const periods = event.periods?.filter((id) => id !== periodId);
+  if (periods?.length) next.periods = periods;
+  else delete next.periods;
+  return next;
+}
+
+/** The ids of the hidden periods. */
+export const hiddenPeriods = (doc: Doc): Set<string> => new Set(doc.items.filter((item) => item.kind === 'period' && item.hidden).map((item) => item.id));
 
 /** A new, empty chronology. */
 export function emptyDoc(kind: DocKind, id: string, title: string, lang: string, generator: string, now = new Date()): Doc {
